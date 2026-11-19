@@ -1,6 +1,6 @@
 # 003 Execution
 
-This document follows an accepted Ticket through execution, delivery and recovery. It builds on [001 Domain model](001-domain.md) and [002 Authorization](002-authorization.md).
+This document follows an accepted Ticket through execution, delegation, delivery and recovery. It builds on [001 Domain model](001-domain.md) and [002 Authorization](002-authorization.md).
 
 ## Ticket stages
 
@@ -10,55 +10,80 @@ Each open Ticket has one stage, determined by what it is waiting for. Read the t
 | --- | --- | --- |
 | person / delivery | Delivering an Input to the Executor Session failed; it is retried after 2 seconds, then after a delay that doubles up to a minute, and a success, a new Assignment or the Ticket's end clears it | Input undelivered |
 | person / answer | It has an Attention | Awaiting answer |
-| person / review | The latest Report is `ready` | Awaiting review |
+| person / review | The latest Report is `ready` while the Ticket still follows a Source's Thread | Awaiting review |
 | person / blocked, failed | The latest Report is `blocked` or `failed`, and no person's message reached the Ticket since | Blocked · Failed |
 | working / queued | No Assignment, or a pending one | Queued |
 | idle | The latest Report is `waiting`, or the Assignment ended | Waiting for a Trigger |
 | working | Everything else | Working |
 
-A `person` stage means the Ticket cannot continue without human input. A new human message releases a `blocked` or `failed` Ticket to its Executor, so it moves to the next matching stage, usually `working`.
+A `person` stage means the Ticket cannot continue without human input. A new revision of the plan releases a `blocked` or `failed` Ticket to its Executor, so it moves to the next matching stage, usually `working`.
 
-An `idle` Ticket has finished its turn without an outstanding question. A Trigger on a subscribed Thread can continue it.
+An `idle` Ticket has finished its turn without an outstanding question. A revision of its plan can continue it.
 
 ## The Executor
 
 Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under the configured execution root, which defaults to `<stateDir>/work`.
 
-Executor Sessions run commands without approval as the operator's OS user. Their `super-coding-agent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker receive new messages at the next step instead of waiting for a long command to finish.
+Executor Sessions run commands without approval as the operator's OS user. Their `super-coding-agent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker take a new revision of its plan at the next step instead of waiting for a long command to finish.
 
-The main Session uses `super-coding-agent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation. Workers delegate one-shot tasks to the external Claude Code and Codex providers rather than spawning DeepSeek Harness subagents.
-
-### Background work and worker slots
-
-When a turn ends with shell jobs or subagents still running, the Ticket keeps its worker slot and stays working. It is not reported as waiting, and the main Session receives no waiting report. A completed job or subagent wakes the Executor with its result in the same slot. Once a turn ends with no background work, the Executor reports waiting normally.
-
-After each turn, background work has at most 30 minutes to finish. At that limit, shell jobs are killed and the Ticket is reported waiting. The report includes the Executor's last words and which jobs were killed or subagents remain active. Subagents are allowed to continue. The Executor reads killed-job results on its next turn.
-
-A handoff to a person frees the slot immediately and leaves the Report in effect. This applies after a `ready` Report or a question, unless another Input arrived since, and after any `blocked` or `failed` Report.
-
-At handoff, subagents stop. Shell jobs, such as a server offered for review, may continue until the Assignment ends. They hold no slot and are exempt from the 30-minute limit, including after later turns. Their completion does not wake the Executor; it reads the results on its next turn.
-
-A person can also start a turn by writing directly in the Executor Session. Its background work follows the same rules.
-
-When an Assignment ends, its shell jobs are killed without waking the Session. Its subagents are released, and any completion turns they wake are dropped. The replacement Assignment and its waiting Inputs start after that shutdown finishes.
-
-Stopping or restarting the plugin inside the DeepSeek Harness process uses the same shutdown path. Inputs not yet taken into Session history are retained. Shutdown waits up to 10 seconds for each worker's background work; a process restart ends that work outright. An Assignment interrupted while busy restarts with a recovery note.
-
-A worker's delegated tasks run as one-shot children of the external Claude Code or Codex provider in the ticket directory: each receives one self-contained brief, has no Session of its own, accepts no follow-up messages, and returns only its final answer. The worker preset carries no DeepSeek Harness spawn or fork delegation.
+The main Session uses `super-coding-agent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation.
 
 ### Preparing a Ticket directory
 
-Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` in the execution root. It has ten minutes to finish. Without a prepare command, the worker starts in an empty directory.
+Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` in the execution root. It has ten minutes to finish. The default makes the directory a git worktree of the plan Source's checkout, on a new branch named after the Ticket:
 
-A failed command fails the Ticket and records its output. A retry or a person's message on one of the Ticket's Threads tries preparation again. A typical command uses `git worktree` to create a checkout. A pull request belongs to the Ticket when its branch's last path segment matches the Ticket's short name.
+```sh
+git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"
+```
+
+The branch starts from the commit the checkout has checked out. With an empty prepare command, the worker starts in an empty directory.
+
+A failed command fails the Ticket and records its output. A retry or a new revision of the plan tries preparation again.
+
+### Delegation to Claude Code and Codex
+
+The worker is a coordinator. It splits the Ticket into subtasks that each finish within the configured bound (20 minutes by default), one concern each, such as one module or one failing test. It never delegates the whole plan, an open-ended investigation, or a decision the plan leaves open.
+
+Each subtask has three steps: develop, verify and review. The Subagents settings say who takes each step: Claude Code, Codex, or the worker itself. By default Claude Code develops, and Codex verifies and reviews. A step whose provider is off falls to the worker.
+
+The worker delegates through two one-shot tools, `subagent_claude_code` and `subagent_codex`. Each runs the external CLI once in the Ticket directory with one self-contained brief: the goal, the files it touches, the constraints from the plan and the repository's `AGENTS.md`, the acceptance checks with exact commands, and what to answer. The delegated agent has no Session of its own, accepts no follow-up messages, and returns only its final answer. A verify brief asks for pass or fail on each acceptance criterion with evidence; a review brief asks for findings on the diff by severity; neither changes code. The worker does not spawn DeepSeek Harness subagents.
+
+Around each subtask the worker:
+
+1. commits a checkpoint (`git add -A`, then `git commit --allow-empty -m "checkpoint: <subtask>"`) and notes its commit;
+2. reads the diff of a develop step itself, since an answer's claim is not evidence;
+3. sends verification failures back in a new develop brief, and after two failed rounds restores the directory to the checkpoint, then splits the subtask or reports `blocked` with the evidence;
+4. reports progress: the subtask, who did each step, the verdict.
+
+It delegates one subtask at a time unless two touch disjoint files. It reports `ready` only when every acceptance criterion of the plan passed a verify step or its own check, naming each with its evidence.
+
+The providers use each CLI's own installation and sign-in, and run as the operator's OS user. Claude Code takes its model from the Subagents settings, passed as `ANTHROPIC_MODEL`; Codex takes its model from its own configuration.
+
+### Delivery
+
+The deliverable of a Ticket is one or more commits on its branch, verified against the plan's acceptance criteria. Workers commit with the git identity the Ticket directory has, which is the operator's own. They never push, merge the branch into another branch, delete branches, or edit the plan file or its log. A person reviews the branch and integrates it.
+
+These rules are the **Delivery requirements** prompt section, which a team can change.
+
+### Background work and worker slots
+
+When a turn ends with shell jobs or delegated tasks still running, the Ticket keeps its worker slot and stays working. It is not reported as waiting. A completed job or delegated task wakes the Executor with its result in the same slot. Once a turn ends with no background work, the Executor reports waiting normally.
+
+After each turn, background work has at most 30 minutes to finish. At that limit, shell jobs are killed and the Ticket is reported waiting. The report includes the Executor's last words and which jobs were killed or delegated tasks remain active. The Executor reads killed-job results on its next turn.
+
+A handoff to a person frees the slot immediately and leaves the Report in effect. This applies after a `ready` Report or a question, unless another Input arrived since, and after any `blocked` or `failed` Report. At handoff, delegated tasks stop. Shell jobs, such as a server offered for review, may continue until the Assignment ends; they hold no slot and do not wake the Executor.
+
+A person can also start a turn by writing directly in the Executor Session. Its background work follows the same rules.
+
+When an Assignment ends, its shell jobs are killed without waking the Session, and its delegated tasks are released. The replacement Assignment and its waiting Inputs start after that shutdown finishes.
+
+Stopping or restarting the plugin inside the DeepSeek Harness process uses the same shutdown path. Inputs not yet taken into Session history are retained. Shutdown waits up to 10 seconds for each worker's background work; a process restart ends that work outright.
 
 ### Concurrency
 
 A Ticket holds a worker slot from the start of a launch, including preparation, or from the delivery that wakes its idle Executor. It also holds the slot throughout an active turn.
 
-The configured concurrency limit applies to these slots, with one extra slot for a person's message or a status request. Such a wake can use the extra slot when normal slots are full, and takes the next free slot before a new launch. New work therefore cannot prevent a person from continuing an existing Ticket.
-
-Other Inputs, such as CI results, wait for a normal slot. A launch waits in `working / queued` until a slot is free. Launches run concurrently, so a slow prepare command delays only its own Ticket.
+The configured concurrency limit applies to these slots, with one extra slot for a person's message, such as a plan revision, or a status request. Such a wake can use the extra slot when normal slots are full, and takes the next free slot before a new launch. New work therefore cannot prevent a person from continuing an existing Ticket. A launch waits in `working / queued` until a slot is free.
 
 ### Execution variables
 
@@ -67,137 +92,90 @@ The prepare command and Executor instructions receive the same execution variabl
 | Variable | Registered by | Value |
 | --- | --- | --- |
 | `SUPER_CODING_AGENT_DIR`, `SUPER_CODING_AGENT_NAME`, `SUPER_CODING_AGENT_TICKET` | Executor | The Ticket's directory, short name and id |
+| `SUPER_CODING_AGENT_DEVELOP_TOOL`, `SUPER_CODING_AGENT_VERIFY_TOOL`, `SUPER_CODING_AGENT_REVIEW_TOOL` | Executor | The tool that takes each step of a subtask: `subagent_claude_code`, `subagent_codex`, or `worker` |
+| `SUPER_CODING_AGENT_SUBTASK_MINUTES` | Executor | Minutes one delegated subtask should finish within |
 | `SUPER_CODING_AGENT_BLOCKED_COMMANDS` | Executor | Commands the Executor may not run |
-| `SUPER_CODING_AGENT_GITHUB_REPOSITORY` | GitHub | The repository the Source watches, `owner/name` |
-| `SUPER_CODING_AGENT_GITHUB_ACCOUNT`, `SUPER_CODING_AGENT_GITHUB_COMMIT_EMAIL` | GitHub | The agent account and its commit email |
-| `SUPER_CODING_AGENT_GITHUB_NUMBER`, `SUPER_CODING_AGENT_GITHUB_PR_HEAD` | GitHub | The Issue or pull request that started the Ticket, and its head ref when it is a pull request |
-| `SUPER_CODING_AGENT_FEISHU_BOT`, `SUPER_CODING_AGENT_FEISHU_CHAT` | Feishu | The bot, and the chat that started the Ticket |
+| `SUPER_CODING_AGENT_REPOSITORY`, `SUPER_CODING_AGENT_PLAN_DIR` | plan | The checkout and the plan directory, as absolute paths |
+| `SUPER_CODING_AGENT_PLAN_FILE` | plan | The absolute path of the plan file that started the Ticket |
 
-Ticket-specific values come from its directory and originating Trigger. Other values come from the current deployment settings. Only the panel can change execution environment settings; text sent to the main Session cannot change the configured shell command.
+Ticket-specific values come from its directory and originating Trigger. Other values come from the current settings. Only the panel can change the execution environment and the Subagents settings; text sent to the main Session cannot change the configured shell command.
 
-Workers reach GitHub through the agent account's `gh` and Feishu through the bot's `lark-cli`. Blocked commands fail when invoked by name.
-
-These wrappers and directories establish defaults, not a security boundary. A worker can still execute a program by absolute path.
-
-## Merging
-
-Auto-merge is governed by the **Delivery requirements** prompt. The host has no merge-specific decision logic.
-
-By default, the Executor never enables auto-merge as the agent account: GitHub attributes the merge to whoever enabled it. Delivery requirements must name another account's CLI for merging. Without one, people merge the pull request.
-
-The default instructions allow auto-merge only for a pull request opened for the Ticket, when it is ready, the required approvals cover the head commit, and additions plus deletions total fewer than 200 lines. Before pushing another revision, the Executor withdraws auto-merge.
-
-Reviews without a body, such as approvals, also arrive as Triggers and can wake an Executor waiting for review. These instructions govern the agent, not GitHub's merge rules. To enforce approvals, require them in branch protection and dismiss stale approvals. Omit the merge CLI or remove the auto-merge paragraph to require manual merging.
+Blocked commands fail when invoked by name; `git`, `claude` and `codex` cannot be blocked. These shims and directories establish defaults, not a security boundary. A worker can still execute a program by absolute path.
 
 ## How a Ticket ends
 
-- **Ready without a pull request:** a `ready` Report ends the Ticket as completed.
-- **Nothing to do:** an Executor that finds no work for a person to act on, such as a request that does not reproduce or is superseded, reports `dropped`. The Ticket ends without a message, unless a matched rule asks for one, and a person's later message on its Threads resumes it.
-### Pull requests
+- **Ready:** a `ready` Report ends the Ticket as completed. Its branch waits for a person.
+- **Nothing to do:** an Executor that finds no work for a person to act on, such as a plan already done on the branch or superseded, reports `dropped`. The Ticket ends without a message.
+- **Stopped:** a person stops it in the panel, or a revision of the plan asks to stop and Eval decides stop.
 
-A Ticket follows the pull request it started from once its Executor reports it. It also follows each pull request opened from its branch once reported by the Executor or found by the GitHub Source. Reopened pull requests are followed again.
+An ended Ticket that a person did not stop keeps its Subscription: a later revision of its plan resumes it in the same Session, directory and branch.
 
-The Ticket is done when none of the pull requests it opened remain open. If it opened none, all pull requests it follows must be closed. It then ends with the outcome of the last relevant close and keeps its Subscriptions, allowing a later human comment to resume it.
-
-A close does not end the Ticket while resumed, retried or recovered work is unfinished. It also waits if the Executor acknowledged or answered a follow-up it owns but has not since made a non-progress Report or ended a turn after reading that message. A later `ready` Report ends the Ticket once the same pull-request completion rule is satisfied.
-
-Chat Channels receive one final notice about the pull-request outcome. GitHub already displays the outcome on the pull request itself. Removing a Ticket's Subscription to a pull request also stops it following that pull request.
-
-"Awaiting review" therefore means a `ready` Report with a pull request.
+A Source can also make a Ticket follow one of its Threads until that Thread closes, so that the close, not a `ready` Report, ends it; the Ticket then shows **Awaiting review** after `ready`. The plan Source does not use this.
 
 ### Follow-ups and context Threads
 
-The Executor decides human follow-ups on its Ticket's own Threads. It handles in-scope requests and hands back requests beyond its scope or for another Ticket. Once no Executor owns the message, it becomes a candidate for the main Session. The main Session may otherwise act on the follow-up only to stop work at the person's request.
+The Executor decides revisions of its own plan. It handles in-scope changes and hands back changes beyond its scope or for another Ticket. Once no Executor owns the revision, it becomes a candidate for the main Session.
 
-An Input counts as read after the Session takes it into a step and subsequently reports or ends a turn. When a Ticket ends, unread messages that were not acknowledged, answered or handed back return to Eval, as described in [002 Authorization](002-authorization.md). Read messages left without action, such as thanks, do not.
+An Input counts as read after the Session takes it into a step and subsequently reports or ends a turn. When a Ticket ends, unread revisions that were not acknowledged, answered or handed back return to Eval, as described in [002 Authorization](002-authorization.md).
 
-Threads followed only for context still deliver messages, but do not give the Ticket ownership of human follow-ups or resume ended Tickets. Those messages can be assessed independently.
-
-Sources poll subscribed Threads while a live Ticket subscribes, and for two weeks after the later of the last Trigger and the subscribing Tickets' end. Afterwards, messages arrive only through ordinary intake: GitHub notifications or Feishu live events.
+Threads followed only for context still deliver revisions, but do not give the Ticket ownership of them or resume ended Tickets.
 
 ## Failure and recovery
 
 ### Executor blocked or failed
 
-When an Executor Session reports `blocked` or `failed`, or fails to start or errors, which records `failed`, the Ticket takes no automatic Input.
+When an Executor Session reports `blocked` or `failed`, or fails to start or errors, which records `failed`, the Ticket takes no automatic Input. Its tools stay available, so a person can continue in the Session directly.
 
-A passing failure of the model provider or the network, an HTTP 408, 429 or 5xx or a refused, reset or timed-out connection, is tried again first, three times with a growing backoff: a launch runs again, and a worker whose turn failed is told to go on; a failed prepare command is not tried again.
+A passing failure of the model provider or the network, an HTTP 408, 429 or 5xx or a refused, reset or timed-out connection, is tried again first, three times with a growing backoff: a launch runs again, and a worker whose turn failed is told to go on. A failed prepare command is not tried again, and neither is a launch that failed otherwise.
 
-Once failed, CI and bot messages are recorded on it, but they are not delivered and do not wake the Session.
+A new revision of the plan, a later Report that is neither `blocked` nor `failed`, or a retry ends the hold. It is worked out from the stored Reports and Inputs, so a restart keeps it.
 
-Its tools stay available, so a person can continue in the Session directly.
-
-A launch that failed is not tried again on its own.
-
-A person's message, a later Report that is neither `blocked` nor `failed`, or a retry ends the hold.
-
-It is worked out from the stored Reports and Inputs, so a restart keeps it.
 ### Retry
 
-Available while an open Ticket is in `person / delivery`, `person / blocked` or `person / failed`: a new Assignment, which starts its worker again and takes the Inputs that wait, is the remedy for each.
-
-Once a person's message reached a blocked or failed Ticket, the Executor has the message, so the Ticket shows as working, or as queued when a failed launch starts again, and offers no retry, unless delivering that message failed.
-
-A retry ends the current Assignment and starts a new one in the same Executor Session, directory, branch and pull request.
+Available while an open Ticket is in `person / delivery`, `person / blocked` or `person / failed`. A retry ends the current Assignment and starts a new one in the same Executor Session, directory and branch, which takes the Inputs that wait.
 
 The Executor model applies only when a Session is created; an existing Session keeps its model.
+
 ### Restart
 
-Running Assignments end with "host restarted" and new ones start with a recovery note that tells the Executor to check its directory, git history and GitHub before repeating any outside action, oldest Ticket first.
+Running Assignments end with "super-coding-agent restarted", and new ones start with a recovery note that tells the Executor to inspect its worktree and git history before continuing and not to repeat a completed operation, oldest Ticket first. A worker can also return to its last checkpoint commit.
 
 Assignments that are waiting, ready, blocked or failed stay as they are, unless an Input reached them after that Report, in which case they start again too.
 
-Sessions, directories, Subscriptions, pending messages and the stored work below survive a restart, and so does the record of which messages each Executor Session took into its history, which a step does once it claimed them and before its model call: a message taken by a turn the restart cut off counts as read once a Report or the end of a turn follows, while one a step claimed but a cancel or error cut off before the history counts as unread.
+Sessions, directories, Subscriptions, pending messages and the stored work below survive a restart, and so does the record of which messages each Executor Session took into its history.
 
-A retry or a restart gives the new Assignment again the messages delivered to the Assignment it replaces that its Executor Session did not take, which a cancel or a cut-off step may have dropped; a copy still waiting in the Session, kept by a restart or persisted across a crash, is taken out before the new Assignment's first message, so the new delivery is the only copy.
 ### Stored work
 
 What super-coding-agent does after a decision, such as relaying a candidate, a follow-up or a report to the main Session, launching an Assignment or delivering an Input, is stored first and done afterwards.
 
-A relay or a delivery that fails, such as when its Session cannot be reached, is retried after 2 seconds, then after a delay that doubles up to a minute; a launch that fails fails its Ticket, unless the failure was a passing one, as above.
+A relay or a delivery that fails is retried after 2 seconds, then after a delay that doubles up to a minute; a launch that fails fails its Ticket, unless the failure was a passing one, as above.
 
-Each kind of work reports an error among the overview's system problems only after one item failed three times in a row; a failed Input delivery shows on its Ticket instead.
+Each kind of work reports an error among the overview's system problems only after one item failed three times in a row; a failed Input delivery shows on its Ticket instead. Relays to the main Session keep their order, and so do notices.
 
-Relays to the main Session keep their order, and so do notices; a failed one holds back the later ones of its kind.
 ### Source failure
 
-The GitHub Source reads each Issue, pull request and Thread on its own: a failed read keeps its error on its Thread, is read again on the next poll, and counts towards an error of the Source, which it reports after three failed polls in a row by default; any successful poll resets the count.
+The plan Source reads the whole plan directory on each check. A check that fails is tried again on the next one; after three failed checks in a row by default, the `plan` health entry reports an error, and a successful check clears it. A missing plan directory is reported at once. A plan file over 2 MiB is skipped and named in the Source's state.
 
-GitHub answers 404 also when the agent lost access to a private repository, so a 404 is retried.
-
-A notified Issue or pull request whose reads keep failing is dropped a day after its first failed read, and at once when GitHub reports it as deleted; it then no longer fails the poll, its Thread keeps the error, and the Source's state names it.
-
-Its read position stays where it was, so a later notification or a poll of its Thread reads what the failed reads missed.
-
-The Feishu event consumer reports every failure, and polling of subscribed topics keeps each failure on its Thread.
-
-A malformed item in a GitHub list or a Feishu page is skipped, and the Source's state counts it.
 ### Channel failure
 
-Outgoing messages are stored and sent as stored work, retried with backoff from 5 seconds, doubling up to 300.
+Replies are stored and sent as stored work, retried with backoff from 5 seconds, doubling up to 300. Each reply is appended to the plan's log once: a resend of the same message finds its marker and appends nothing.
 
-A Ticket's messages to one conversation go out in the order they were queued, so its acknowledgement comes before its later answer or result: a message waits while an earlier one of the same Ticket to the same conversation has not gone out, until that one has failed three times in a row and shows as a problem.
+A Ticket's messages to one log go out in the order they were queued, so its acknowledgement comes before its later answer or result. Messages of other Tickets do not wait for it. A message with failed attempts is a system problem until it goes out or is withdrawn. While its Source is off, it waits.
 
-Messages of other Tickets, and messages of no Ticket, do not wait for it.
+### Subagent failure
 
-A message with failed attempts is a system problem until it goes out or is withdrawn.
+Saving the Subagents settings checks each enabled CLI with `<command> --version` and refuses a save whose CLI does not start. At startup the same check runs before each provider is mounted; a failure is reported in the `subagents` health entry, and that provider's tool is missing until the CLI works and the settings are saved again or super-coding-agent restarts. The worker takes the steps of a missing provider itself.
 
-A message is dropped only when its Source no longer listens to the conversation, or when the Source answers that the conversation can never receive it; while its Source is off, it waits.
-
-The Sources answer that for a deleted Issue or a locked conversation on GitHub, and for a recalled message or one Feishu no longer finds on Feishu.
-
-A reply to a review comment that no longer exists goes to the pull request's conversation instead.
-
-A dropped message keeps its record, with when and why it was dropped and the Ticket it was for, so it is never queued again; a dropped acknowledgement reads as dropped, not sent.
 ### Pause processing
 
 Stops dispatch, new Evals, Eval timeouts, Input delivery and replies; a launch already under way waits until processing resumes.
 
-Sources keep recording Triggers, and a running Executor turn is not interrupted.
+The plan Source keeps recording Triggers, and a running Executor turn is not interrupted.
 
-A person's message to an ended Ticket waits: the first pass after the pause resumes the Ticket, if its Mandate holds under the Policy then.
+A revision of an ended Ticket's plan waits: the first pass after the pause resumes the Ticket, if its Mandate holds under the Policy then.
 
 An Eval in progress does not expire during a pause; its deadline moves later by the pause's length.
+
 ### Invalid configuration
 
 A stored Source configuration that its kind rejects disables that Source instance.

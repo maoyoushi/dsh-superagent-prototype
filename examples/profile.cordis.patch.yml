@@ -1,5 +1,6 @@
 # Example profile configuration ($DSH_HOME/profiles/<profile>/cordis.patch.yml).
 # Replace <placeholders> before first start; see docs/006-deployment.md.
+# The repository, the plan directory and the subagents are set in the panel, not here.
 - id: webserver
   config:
     host: 127.0.0.1
@@ -7,6 +8,3 @@
 - id: super-coding-agent
   config:
     stateDir: <absolute path, for example /home/me/.dsh/state/super-coding-agent>
-# Feishu is optional: uncomment to enable its Source, then set the bot's lark-cli on the Feishu Source.
-# - id: super-coding-agent-feishu
-#   disabled: false
