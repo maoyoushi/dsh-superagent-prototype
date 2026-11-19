@@ -26,7 +26,7 @@ Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory 
 
 Executor Sessions run commands without approval as the operator's OS user. Their `dsh-superagent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker receive new messages at the next step instead of waiting for a long command to finish.
 
-The main Session uses `dsh-superagent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation. Worker subagents use DeepSeek Harness's `standard` preset.
+The main Session uses `dsh-superagent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation. Workers delegate one-shot tasks to the external Claude Code and Codex providers rather than spawning DeepSeek Harness subagents.
 
 ### Background work and worker slots
 
@@ -44,7 +44,7 @@ When an Assignment ends, its shell jobs are killed without waking the Session. I
 
 Stopping or restarting the plugin inside the DeepSeek Harness process uses the same shutdown path. Inputs not yet taken into Session history are retained. Shutdown waits up to 10 seconds for each worker's background work; a process restart ends that work outright. An Assignment interrupted while busy restarts with a recovery note.
 
-Worker subagents, including nested ones, use DeepSeek Harness's `standard` preset with the worker's permissions. They retain only the worker's allowed work tools, and lose those tools when the Ticket ends. Under `standard`, a shell command moves to the background after 60 seconds. A subagent's jobs are killed when it ends.
+A worker's delegated tasks run as one-shot children of the external Claude Code or Codex provider in the ticket directory: each receives one self-contained brief, has no Session of its own, accepts no follow-up messages, and returns only its final answer. The worker preset carries no DeepSeek Harness spawn or fork delegation.
 
 ### Preparing a Ticket directory
 
