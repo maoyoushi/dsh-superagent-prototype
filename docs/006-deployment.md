@@ -177,6 +177,8 @@ The process environment that setup writes:
 
 A file in `worker-bin` that super-coding-agent did not write stops setup.
 
+These changes apply to the whole DeepSeek Harness process, because its shell tools take no per-Session environment: Claude Code and Codex inherit them, and so does every Session of the profile, which matters when the profile is DeepSeek Harness Desktop's own. With no blocked commands the shim directory is empty, and the git variables only stop git from prompting for credentials; a blocked command is blocked for the subagents too.
+
 ## Try it
 
 Write a small plan as a new Markdown file at a path the plan Source's patterns match, such as `docs/plans/first.md`, with the change it asks for and its acceptance criteria, such as a command that must pass. Within a check interval (30 seconds by default), Overview shows a Ticket. The agent acknowledges the plan in its log, works in its own Session and worktree, delegates subtasks to Claude Code and Codex, and writes the result, with the branch `agent/<ticket name>`, to the log. Edit the plan to change or continue the work.
