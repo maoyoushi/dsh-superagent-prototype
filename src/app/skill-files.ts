@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { packagePath } from '../infra/paths.ts'
 /**
  * Reads a packaged text file with normalized Unix line endings.
- * @throws Naming the file when it is missing or whitespace-only, because `dsh-superagent` cannot load without it.
+ * @throws Naming the file when it is missing or whitespace-only, because `super-coding-agent` cannot load without it.
  */
 function packaged(...parts: string[]): { path: string; text: string } {
   const path = packagePath(...parts)

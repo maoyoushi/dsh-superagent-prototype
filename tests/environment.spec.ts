@@ -38,28 +38,28 @@ describe('worker shims', () => {
     // It writes no git configuration of its own.
     expect(readdirSync(dir).sort()).toEqual(['real', 'worker-bin'])
   })
-  it('replace only what dsh-superagent wrote and refuse anything else in its places', async () => {
+  it('replace only what super-coding-agent wrote and refuse anything else in its places', async () => {
     await writeEnvironment(testDeployment({ stateDir: dir }), ['old-cli', 'kept-cli'])
     await writeEnvironment(testDeployment({ stateDir: dir }), ['kept-cli'])
     expect(readdirSync(workerBin(dir)).sort()).toEqual(['kept-cli'])
     // A file that merely contains the marker on a later line, and a symlink to a shim, are rejected.
     writeFileSync(join(workerBin(dir), 'notes'), `notes\nmore\n${readFileSync(join(workerBin(dir), 'kept-cli'), 'utf8').split('\n')[1]}\n`)
-    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow(`${join(workerBin(dir), 'notes')} was not written by dsh-superagent`)
+    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow(`${join(workerBin(dir), 'notes')} was not written by super-coding-agent`)
     expect(readdirSync(workerBin(dir)).sort()).toEqual(['kept-cli', 'notes'])
     rmSync(join(workerBin(dir), 'notes'))
     symlinkSync(join(workerBin(dir), 'kept-cli'), join(workerBin(dir), 'link'))
-    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow('link was not written by dsh-superagent')
+    await expect(writeEnvironment(testDeployment({ stateDir: dir }), [])).rejects.toThrow('link was not written by super-coding-agent')
     rmSync(join(workerBin(dir), 'link'))
     await writeEnvironment(testDeployment({ stateDir: dir }), [])
     expect(readdirSync(workerBin(dir))).toEqual([])
   })
   it('replaces the files it wrote under the project\'s earlier names', async () => {
     await writeEnvironment(testDeployment({ stateDir: dir }), ['old-cli', 'older-cli', 'oldest-cli'])
-    const legacy = (file: string, name: string) => writeFileSync(file, readFileSync(file, 'utf8').replace('Written by dsh-superagent', `Written by ${name}`))
+    const legacy = (file: string, name: string) => writeFileSync(file, readFileSync(file, 'utf8').replace('Written by super-coding-agent', `Written by ${name}`))
     legacy(join(workerBin(dir), 'old-cli'), 'dsh-tag'); legacy(join(workerBin(dir), 'older-cli'), 'dsh-freelancer'); legacy(join(workerBin(dir), 'oldest-cli'), 'dsh-go')
     await writeEnvironment(testDeployment({ stateDir: dir }), ['old-cli'])
     expect(readdirSync(workerBin(dir))).toEqual(['old-cli'])
-    expect(readFileSync(join(workerBin(dir), 'old-cli'), 'utf8')).toContain('Written by dsh-superagent')
+    expect(readFileSync(join(workerBin(dir), 'old-cli'), 'utf8')).toContain('Written by super-coding-agent')
   })
 })
 

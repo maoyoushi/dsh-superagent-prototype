@@ -151,8 +151,8 @@ const ROUTES: readonly Route[] = [
     return { revision: status.revision, read: `prompts/${current.revision}`, notification_pending: status.notificationPending,
       ...changed.length ? { default_changed: changed } : {}, ...removed.length ? { removed_parts: removed } : {},
       sessions: status.sessions.map(session => ({ session_id: session.sessionId, revision: session.revision })),
-      skills: { built_in: skills.filter(name => !(name in current.config.skills)).map(name => `dsh-superagent-${name}`),
-        team: Object.keys(current.config.skills).map(name => `dsh-superagent-${name}`) },
+      skills: { built_in: skills.filter(name => !(name in current.config.skills)).map(name => `super-coding-agent-${name}`),
+        team: Object.keys(current.config.skills).map(name => `super-coding-agent-${name}`) },
       items: history.revisions.map(({ previousRevision, savedAt, ...version }) =>
         ({ ...version, previous_revision: previousRevision, saved_at: savedAt })),
       next_offset: history.next_offset }

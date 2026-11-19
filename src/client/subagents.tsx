@@ -6,7 +6,7 @@ import { SaveBar } from './draft.tsx'
 import { usePanel } from './provider.tsx'
 import { Field, Fields, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { Section } from './widgets.tsx'
-import type { DshSuperagentKey } from './locales.ts'
+import type { SuperCodingAgentKey } from './locales.ts'
 
 type Config = SettingsView['blocks']['subagents']['value']
 type Status = SettingsView['subagents']['codex']
@@ -25,7 +25,7 @@ export function envOf(text: string): Record<string, string> {
 }
 
 /** What a provider's last availability check found, in words. */
-function availability(t: (key: DshSuperagentKey, values?: Record<string, string>) => string, status: Status): string {
+function availability(t: (key: SuperCodingAgentKey, values?: Record<string, string>) => string, status: Status): string {
   if (!status.enabled) return t('subagentOff')
   if (status.available === false) return t('subagentUnavailableNow', { error: status.error })
   if (status.mounted) return t('subagentReady', { version: status.version || '—' })

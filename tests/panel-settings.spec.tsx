@@ -36,17 +36,17 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
   await click(find(zh['promptPart.runtime/work'], '.dt-settings-link'))
   await type(field<HTMLInputElement>(zh.maxWorkers), '5')
   // An empty root uses the default directory, which the field names instead of looking set.
-  expect(field<HTMLInputElement>(zh.executionDirectory).closest('.dt-field')!.querySelector('small')?.textContent).toBe('留空时用 /srv/dsh-superagent/work')
+  expect(field<HTMLInputElement>(zh.executionDirectory).closest('.dt-field')!.querySelector('small')?.textContent).toBe('留空时用 /srv/super-coding-agent/work')
   await type(field<HTMLInputElement>(zh.executionDirectory), '/srv/work')
   // A variable picked from the list goes where the caret is in the prepare command.
   const prepare = field<HTMLTextAreaElement>(zh.prepareCommand)
   await type(prepare, 'git worktree add ')
   prepare.setSelectionRange(17, 17)
   await click('可用的环境变量 3')
-  expect(all('.dt-table tbody tr').map(row => row.textContent)).toEqual(['DSH_SUPERAGENT_DIR工单的执行目录执行器', 'DSH_SUPERAGENT_NAME工单短名执行器',
-    'DSH_SUPERAGENT_REPOSITORY仓库计划文件 · 已关闭'])
-  await click('DSH_SUPERAGENT_DIR')
-  expect(field<HTMLTextAreaElement>(zh.prepareCommand).value).toBe('git worktree add "$DSH_SUPERAGENT_DIR"')
+  expect(all('.dt-table tbody tr').map(row => row.textContent)).toEqual(['SUPER_CODING_AGENT_DIR工单的执行目录执行器', 'SUPER_CODING_AGENT_NAME工单短名执行器',
+    'SUPER_CODING_AGENT_REPOSITORY仓库计划文件 · 已关闭'])
+  await click('SUPER_CODING_AGENT_DIR')
+  expect(field<HTMLTextAreaElement>(zh.prepareCommand).value).toBe('git worktree add "$SUPER_CODING_AGENT_DIR"')
   await type(field<HTMLInputElement>(zh.blockedCommands), 'personal-cli  other.cli')
   const [workerProvider, workerModel, effort] = all('.dt-model input')
   await type(workerProvider as HTMLInputElement, 'worker-provider'); await type(workerModel as HTMLInputElement,
@@ -54,7 +54,7 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
   expect([...document.querySelectorAll('#dt-worker-model-efforts option')].map(option => option.getAttribute('value'))).toEqual(['high'])
   await click(zh.save)
   expect(server.settings.executor).toEqual({ maxWorkers: 5, directory: '/srv/work',
-    prepare: 'git worktree add "$DSH_SUPERAGENT_DIR"', blockedCommands: ['personal-cli', 'other.cli'], model: { provider: 'worker-provider',
+    prepare: 'git worktree add "$SUPER_CODING_AGENT_DIR"', blockedCommands: ['personal-cli', 'other.cli'], model: { provider: 'worker-provider',
       model: 'worker-model', reasoningEffort: 'high' } })
   expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/eval',
     'settings/executor'])
@@ -104,7 +104,7 @@ it('shows save and discard only while a settings block has edits, at the end of 
   const plan = all('.dt-card').find(card => card.querySelector('.dt-card-title')?.textContent === '计划文件')!
   await type(field<HTMLInputElement>('仓库目录'), '/elsewhere')
   expect(plan.lastElementChild!.classList.contains('dt-savebar')).toBe(true)
-  // The repository is read by setup, so the bar warns that saving restarts dsh-superagent and interrupts running work.
+  // The repository is read by setup, so the bar warns that saving restarts super-coding-agent and interrupts running work.
   expect(plan.lastElementChild!.textContent).toContain('2 个进行中的派工会中断')
 })
 

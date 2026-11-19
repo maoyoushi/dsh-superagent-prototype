@@ -30,11 +30,11 @@ export const planRoot = (config: Pick<PlanConfig, 'repository' | 'directory'>): 
 export const planKind: SourceKind<PlanConfig> = {
   kind: SOURCE,
   title: { zh: '计划文件', en: 'Plan files' },
-  description: { zh: '仓库里由人写好的计划或任务文件（superpowers、BMAD、speckit 等）；新增或修改的文件成为待接的工作，回复写入 .superagent 下的日志。', en: 'Plan or task files people write in the repository (superpowers, BMAD, speckit and the like); a new or changed file becomes work to accept, and replies go to a log under .superagent.' },
+  description: { zh: '仓库里由人写好的计划或任务文件（superpowers、BMAD、speckit 等）；新增或修改的文件成为待接的工作，回复写入 .super-coding-agent 下的日志。', en: 'Plan or task files people write in the repository (superpowers, BMAD, speckit and the like); a new or changed file becomes work to accept, and replies go to a log under .super-coding-agent.' },
   schema: PlanConfigSchema,
   fields: [
     { key: 'repository', type: 'text', pattern: '/.*', label: { zh: '仓库目录', en: 'Repository directory' },
-      hint: { zh: '本地 git 检出的绝对路径；执行器在每个工单的目录里基于它工作。保存时检查它和计划目录，然后重启 dsh-superagent。', en: 'Absolute path of the local git checkout; the Executor works from it in each Ticket\'s directory. Saving checks it and the plan directory, then restarts dsh-superagent.' } },
+      hint: { zh: '本地 git 检出的绝对路径；执行器在每个工单的目录里基于它工作。保存时检查它和计划目录，然后重启 super-coding-agent。', en: 'Absolute path of the local git checkout; the Executor works from it in each Ticket\'s directory. Saving checks it and the plan directory, then restarts super-coding-agent.' } },
     { key: 'directory', type: 'text', label: { zh: '计划目录', en: 'Plan directory' },
       hint: { zh: '相对仓库目录的路径，或绝对路径。其下每个 Markdown 文件是一份计划；隐藏目录不读。', en: 'A path relative to the repository directory, or absolute. Every Markdown file below it is a plan; hidden directories are not read.' } },
     { key: 'includeExisting', type: 'switch', label: { zh: '接收已有的计划', en: 'Receive existing plans' },
@@ -61,11 +61,11 @@ export const planKind: SourceKind<PlanConfig> = {
   },
   environment: {
     variables: [
-      { key: 'DSH_SUPERAGENT_REPOSITORY', description: { zh: '本地 git 检出的绝对路径', en: 'Absolute path of the local git checkout' } },
-      { key: 'DSH_SUPERAGENT_PLAN_DIR', description: { zh: '计划目录的绝对路径', en: 'Absolute path of the plan directory' } },
-      { key: 'DSH_SUPERAGENT_PLAN_FILE', description: { zh: '这个工单来源计划文件的绝对路径；不要修改它', en: 'Absolute path of this ticket\'s plan file; never edit it' } }],
-    values: ({ deployment, trigger }) => ({ DSH_SUPERAGENT_REPOSITORY: deployment.repository, DSH_SUPERAGENT_PLAN_DIR: deployment.plan.directory,
-      DSH_SUPERAGENT_PLAN_FILE: typeof trigger?.meta.file === 'string' ? trigger.meta.file : '' }),
+      { key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '本地 git 检出的绝对路径', en: 'Absolute path of the local git checkout' } },
+      { key: 'SUPER_CODING_AGENT_PLAN_DIR', description: { zh: '计划目录的绝对路径', en: 'Absolute path of the plan directory' } },
+      { key: 'SUPER_CODING_AGENT_PLAN_FILE', description: { zh: '这个工单来源计划文件的绝对路径；不要修改它', en: 'Absolute path of this ticket\'s plan file; never edit it' } }],
+    values: ({ deployment, trigger }) => ({ SUPER_CODING_AGENT_REPOSITORY: deployment.repository, SUPER_CODING_AGENT_PLAN_DIR: deployment.plan.directory,
+      SUPER_CODING_AGENT_PLAN_FILE: typeof trigger?.meta.file === 'string' ? trigger.meta.file : '' }),
   },
 }
 
@@ -107,7 +107,7 @@ export async function checkPlans(ctx: SourceContext, config: PlanConfig): Promis
   return received
 }
 
-export const name = 'dsh-superagent-plan'
+export const name = 'super-coding-agent-plan'
 export const inject = ['orchestrator']
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.orchestrator.sources.register(planKind), 'plan: source kind')

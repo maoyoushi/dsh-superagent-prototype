@@ -7,14 +7,14 @@ import { HEALTH_TEXT } from '../sources/host.ts'
 
 const TEXT = {
   // Shared
-  title: ['Superagent', 'Superagent'],
+  title: ['Super Coding Agent', 'Super Coding Agent'],
   close: ['关闭', 'Close'],
   cancel: ['取消', 'Cancel'],
   confirm: ['确定', 'Confirm'],
   loading: ['正在读取…', 'Loading…'],
   loadMore: ['加载更多', 'Load more'],
-  offline: ['无法连接到 dsh-superagent 服务。请确认它正在运行（dsh-superagent status），然后重试。', 'Cannot reach the dsh-superagent service. Check that it is running (dsh-superagent status), then retry.'],
-  serverError: ['dsh-superagent 服务内部错误（{status}），请查看运行日志后重试。', 'dsh-superagent service error ({status}). Check the log, then retry.'],
+  offline: ['无法连接到 super-coding-agent 服务。请确认它正在运行（super-coding-agent status），然后重试。', 'Cannot reach the super-coding-agent service. Check that it is running (super-coding-agent status), then retry.'],
+  serverError: ['super-coding-agent 服务内部错误（{status}），请查看运行日志后重试。', 'super-coding-agent service error ({status}). Check the log, then retry.'],
   requestFailed: ['请求失败（{status}）。', 'Request failed ({status}).'],
   empty: ['—', '—'],
   yes: ['是', 'Yes'],
@@ -29,7 +29,7 @@ const TEXT = {
   'mode.off': ['关闭', 'Off'],
   'mode.observe': ['仅观察', 'Observe'],
   'mode.auto': ['自动接单', 'Auto'],
-  'health.runtime': ['dsh-superagent', 'dsh-superagent'],
+  'health.runtime': ['super-coding-agent', 'super-coding-agent'],
   'health.models': ['模型服务', 'Model service'],
   'health.assessment': ['发给主 Session 的评估', 'Evals sent to the main Session'],
   'health.launch': ['派工启动', 'Assignment launches'],
@@ -73,8 +73,8 @@ const TEXT = {
   collapse: ['收起', 'Collapse'],
   expand: ['展开全文', 'Show all'],
   setupProblem: ['部署检查未通过：{detail}', 'Deployment check failed: {detail}'],
-  hostNotRunning: ['dsh-superagent 没有响应：它可能正在重启；持续如此时，DSH 的日志写明原因，常见的是配置有误。', 'dsh-superagent is not answering: it may be restarting; if this persists, the DSH log names the cause, often a configuration error.'],
-  savedRestarting: ['已保存，dsh-superagent 正在重启', 'Saved; dsh-superagent is restarting'],
+  hostNotRunning: ['super-coding-agent 没有响应：它可能正在重启；持续如此时，DSH 的日志写明原因，常见的是配置有误。', 'super-coding-agent is not answering: it may be restarting; if this persists, the DSH log names the cause, often a configuration error.'],
+  savedRestarting: ['已保存，super-coding-agent 正在重启', 'Saved; super-coding-agent is restarting'],
   problems: ['系统问题', 'System problems'],
   dismiss: ['不再提示', 'Dismiss'],
   saved: ['已保存', 'Saved'],
@@ -84,13 +84,13 @@ const TEXT = {
   queuedLabel: ['排队', 'Queued'],
   resumeProcessing: ['恢复处理', 'Resume processing'],
   resumeProcessingConfirm: ['恢复后继续评估、派工和发送回复。', 'Resuming starts Evals, Assignments and replies again.'],
-  restartInterrupts: ['保存会重启 dsh-superagent：{count} 个进行中的派工会中断，并带恢复说明重新开始。', 'Saving restarts dsh-superagent: {count} running Assignments stop and start again with a recovery note.'],
+  restartInterrupts: ['保存会重启 super-coding-agent：{count} 个进行中的派工会中断，并带恢复说明重新开始。', 'Saving restarts super-coding-agent: {count} running Assignments stop and start again with a recovery note.'],
   sourceOff: ['已关闭', 'Off'],
   executorWaitingSetup: ['执行器等待部署检查', 'Executor waiting for the deployment check'],
   // Header, search, and tabs
-  panel: ['Superagent', 'Superagent'],
+  panel: ['Super Coding Agent', 'Super Coding Agent'],
   openMaster: ['打开主 Session', 'Open main Session'],
-  pagesLabel: ['dsh-superagent 页面', 'dsh-superagent pages'],
+  pagesLabel: ['super-coding-agent 页面', 'super-coding-agent pages'],
   searchPlaceholder: ['搜索工单、线程、触发或链接', 'Search Tickets, Threads, Triggers or links'],
   searchLabel: ['搜索', 'Search'],
   searchFound: ['找到 {tickets} 个工单、{threads} 个线程、{items} 条触发', 'Found {tickets} Tickets, {threads} Threads and {items} Triggers'],
@@ -111,7 +111,7 @@ const TEXT = {
   needsYouNone: ['没有待处理的工单。', 'No pending Tickets.'],
   pendingTickets: ['待处理工单', 'Pending Tickets'],
   problemEvalOverdue: ['评估超时未决定：{thread}', 'Eval overdue: {thread}'],
-  problemSetup: ['部署检查未通过，dsh-superagent 暂不接单', 'Deployment check failed; dsh-superagent takes no work'],
+  problemSetup: ['部署检查未通过，super-coding-agent 暂不接单', 'Deployment check failed; super-coding-agent takes no work'],
   problemNoSource: ['没有运行中的来源，不会收到任何触发', 'No Source is running; no Triggers arrive'],
   actionOpenSources: ['去打开来源', 'Turn on a Source'],
   problemPaused: ['处理已暂停：不开始新的评估，不派工，不发送回复', 'Processing paused: no new Evals, Assignments or replies'],
@@ -129,8 +129,8 @@ const TEXT = {
   idleLabel: ['等待新触发', 'Waiting for a Trigger'],
   problemNoAllowed: ['没有人能发起工作：各来源上的名单都为空，任何请求都不会成为工单', 'No one may originate work: the lists on every Source are empty, so no request can become a Ticket'],
   actionAddAllowed: ['去添加', 'Add senders'],
-  'problemSetupFix.deployment': ['在部署设置里修正后保存，会重新检查；在 dsh-superagent 之外修复的（例如安装 git），点“重新检查”。', 'Fix it in the Deployment settings and save to check again; after a fix outside dsh-superagent, such as installing git, choose Check again.'],
-  'problemSetupFix.plan': ['在设置 › 来源的计划文件卡片修正后保存，会重新检查；在 dsh-superagent 之外修复的（例如创建目录），点“重新检查”。', 'Fix it on the plan files card of the Source settings and save to check again; after a fix outside dsh-superagent, such as creating a directory, choose Check again.'],
+  'problemSetupFix.deployment': ['在部署设置里修正后保存，会重新检查；在 super-coding-agent 之外修复的（例如安装 git），点“重新检查”。', 'Fix it in the Deployment settings and save to check again; after a fix outside super-coding-agent, such as installing git, choose Check again.'],
+  'problemSetupFix.plan': ['在设置 › 来源的计划文件卡片修正后保存，会重新检查；在 super-coding-agent 之外修复的（例如创建目录），点“重新检查”。', 'Fix it on the plan files card of the Source settings and save to check again; after a fix outside super-coding-agent, such as creating a directory, choose Check again.'],
   // Source
   labelsAdded: ['列表已更新，新增：{names}', 'List updated, added: {names}'],
   labelsCurrent: ['列表已是最新', 'List is up to date'],
@@ -279,7 +279,7 @@ const TEXT = {
   'input.policy-changed': ['策略变更', 'Policy change'],
   'input.reopen': ['续做', 'Reopened'],
   'input.resumed': ['恢复：线程上有人发了新消息', 'Resumed by a new message on its thread'],
-  'input.text': ['dsh-superagent 说明', 'dsh-superagent note'],
+  'input.text': ['super-coding-agent 说明', 'super-coding-agent note'],
   'input.note': ['主 Session 的备注', 'Orchestrator note'],
   attentionPrefix: ['待人工决定：', 'Attention: '],
   stopConfirmTitle: ['停止工单', 'Stop Ticket'],
@@ -385,7 +385,7 @@ const TEXT = {
   openThread: ['打开 {source} 原文', 'Open on {source}'],
   executionDirectoryHint: ['每个工单在这里有自己的目录，以工单短名命名；执行器 Session 在其中工作。这只按目录分开工单，不是安全边界。', 'Each Ticket gets its own directory here, named by its short name, where its Executor Session works. This separates Tickets by directory only; it is not a security boundary.'],
   prepareCommand: ['准备命令', 'Prepare command'],
-  prepareCommandHint: ['新工单的目录建好前，在根目录下用 sh 运行一次，执行环境的变量是它的环境变量，例如用 git worktree 把仓库检出到 $DSH_SUPERAGENT_DIR。留空就是空目录。失败时工单显示失败，并附上命令的输出。', 'Runs once with sh in the root before a new Ticket\'s directory exists, with the execution environment\'s variables as its environment, for example to check a repository out to $DSH_SUPERAGENT_DIR with git worktree. Leave it empty for an empty directory. A failure fails the Ticket with the command\'s output.'],
+  prepareCommandHint: ['新工单的目录建好前，在根目录下用 sh 运行一次，执行环境的变量是它的环境变量，例如用 git worktree 把仓库检出到 $SUPER_CODING_AGENT_DIR。留空就是空目录。失败时工单显示失败，并附上命令的输出。', 'Runs once with sh in the root before a new Ticket\'s directory exists, with the execution environment\'s variables as its environment, for example to check a repository out to $SUPER_CODING_AGENT_DIR with git worktree. Leave it empty for an empty directory. A failure fails the Ticket with the command\'s output.'],
   prepareCommandEmpty: ['留空：空目录', 'Empty: an empty directory'],
   blockedCommands: ['禁止调用的命令', 'Blocked commands'],
   blockedCommandsHint: ['执行器 Session 调用这些命令名时直接失败，例如用你个人账号登录的其他 CLI。只拦按名字的调用，用绝对路径仍能运行，所以不是安全边界。git、claude、codex 不能禁止。', 'Command names that fail when an Executor Session calls them, such as another CLI signed in to your own account. Only calls by name fail; an absolute path still runs, so this is not a security boundary. git, claude and codex cannot be blocked.'],
@@ -558,13 +558,13 @@ const TEXT = {
   'promptRole.orchestrator': ['主 Session', 'Main Session'],
   'promptRole.worker': ['执行器 Session', 'Executor Session'],
   // Deployment
-  deploymentIntro: ['这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。', 'dsh-superagent\'s settings on this machine, kept in the dsh-superagent entry of the DSH configuration; a saved change applies at once, without restarting dsh-superagent.'],
-  deploymentUnavailable: ['dsh-superagent 启动完成后才能修改这些值。', 'These values can be changed once dsh-superagent has started.'],
+  deploymentIntro: ['这台机器上的 super-coding-agent 设置，存放在 DSH 配置文件的 super-coding-agent 条目里；保存后立即生效，不会重启 super-coding-agent。', 'super-coding-agent\'s settings on this machine, kept in the super-coding-agent entry of the DSH configuration; a saved change applies at once, without restarting super-coding-agent.'],
+  deploymentUnavailable: ['super-coding-agent 启动完成后才能修改这些值。', 'These values can be changed once super-coding-agent has started.'],
   deploymentDerived: ['仓库与计划目录', 'Repository and plan directory'],
   deploymentDerivedHint: ['由计划文件来源的设置得出。', 'Derived from the settings of the plan files Source.'],
   deploymentRepository: ['仓库', 'Repository'],
   deploymentPlanDirectory: ['计划目录', 'Plan directory'],
-  deploymentAccountsWhere: ['仓库目录和计划目录在 dsh-superagent 面板的来源设置里修改。', 'The repository and plan directories are changed in the Source settings of the dsh-superagent panel.'],
+  deploymentAccountsWhere: ['仓库目录和计划目录在 super-coding-agent 面板的来源设置里修改。', 'The repository and plan directories are changed in the Source settings of the super-coding-agent panel.'],
   deploymentMachine: ['本机设置', 'This machine'],
   deploymentStateDir: ['状态目录', 'State directory'],
   deploymentStateDirHint: ['数据库、锁和执行器的命令所在目录，只能在 DSH 配置文件里修改。', 'Holds the database, locks and the Executor\'s commands; change it only in the DSH configuration file.'],
@@ -574,11 +574,11 @@ const TEXT = {
   deploymentContextPages: ['一次研判可读的线程页数', 'Thread pages one Assessment may read'],
   deploymentContextTimeout: ['一次上下文读取的时限 / 毫秒', 'Time limit of one context read / ms'],
   deploymentRefused: ['DSH 拒绝了这次修改：设置可能已在别处修改。放弃修改后可看到当前值。', 'DSH refused the change; the settings may have changed elsewhere. Discard to see the current values.'],
-  deploymentNoForms: ['这个 DSH 版本不提供配置表单，这些值只能在 DSH 配置文件的 dsh-superagent 条目里修改。', 'This DSH version has no configuration forms; change these values in the dsh-superagent entry of the DSH configuration file.'],
+  deploymentNoForms: ['这个 DSH 版本不提供配置表单，这些值只能在 DSH 配置文件的 super-coding-agent 条目里修改。', 'This DSH version has no configuration forms; change these values in the super-coding-agent entry of the DSH configuration file.'],
   deploymentReadOnly: ['只有本机上的浏览器可以修改这些值。', 'Only a browser on this machine can change these values.'],
   setupCheck: ['重新检查', 'Check again'],
-  setupChecking: ['正在重新检查，dsh-superagent 正在重启', 'Checking again; dsh-superagent is restarting'],
-  setupCheckInterrupts: ['重新检查会重启 dsh-superagent：{count} 个进行中的派工会中断，并带恢复说明重新开始。', 'Checking again restarts dsh-superagent: {count} running Assignments stop and start again with a recovery note.'],
+  setupChecking: ['正在重新检查，super-coding-agent 正在重启', 'Checking again; super-coding-agent is restarting'],
+  setupCheckInterrupts: ['重新检查会重启 super-coding-agent：{count} 个进行中的派工会中断，并带恢复说明重新开始。', 'Checking again restarts super-coding-agent: {count} running Assignments stop and start again with a recovery note.'],
   // Reason codes; legacy English sentence reasons map to these in text.ts
   'reason.not_human': ['自动消息', 'Automated message'],
   'reason.not_a_member': ['发送者不在这个来源的名单里', 'Sender is not on this Source\'s list'],
@@ -612,7 +612,7 @@ const TEXT = {
   'reason.legacyImport': ['从旧版工单记录导入', 'Imported from a legacy Ticket record'],
   'reason.channelGone': ['对话已无法接收消息', 'The conversation can no longer receive messages'],
   'reason.channelIgnored': ['来源已不再监听这个对话', 'The Source no longer listens to this conversation'],
-  'reason.hostRestarted': ['dsh-superagent 重启', 'dsh-superagent restarted'],
+  'reason.hostRestarted': ['super-coding-agent 重启', 'super-coding-agent restarted'],
   'reason.retried': ['人工重试', 'Retried by a person'],
   'reason.completed': ['已完成', 'Completed'],
   'reason.dropped': ['无需处理，已关闭', 'No action needed; closed'],
@@ -659,7 +659,7 @@ const TEXT = {
   'term.mainSession': ['主 Session', 'Main Session'],
   'term.executorSession': ['执行器 Session', 'Executor Session'],
   'term.policyVersion': ['策略版本', 'Policy version'],
-  'meaning.agent': ['以 dsh-superagent 身份工作的虚拟同事：读计划文件，在本地仓库里以操作者的 git 身份提交，把结果写进计划日志', 'The virtual colleague dsh-superagent runs: it reads plan files, commits in the local repository under the operator\'s git identity, and writes results to the plan log'],
+  'meaning.agent': ['以 super-coding-agent 身份工作的虚拟同事：读计划文件，在本地仓库里以操作者的 git 身份提交，把结果写进计划日志', 'The virtual colleague super-coding-agent runs: it reads plan files, commits in the local repository under the operator\'s git identity, and writes results to the plan log'],
   'meaning.mainSession': ['评估触发、接单派工并回复的 DSH Session；提示词里称 orchestrator', 'The DSH Session that evaluates Triggers, accepts and dispatches work, and replies; prompts call it the orchestrator'],
   'meaning.executorSession': ['执行器为一个工单运行的 DSH Session；提示词里称 worker', 'The DSH Session the Executor runs for one Ticket; prompts call it the worker'],
   'meaning.policyVersion': ['接单规则、各来源上的策略和接单模式的一个组合的标识；每个工单记下接单时的版本', 'The identifier of one combination of rules, the Policy on each Source and accept mode; each Ticket records the version it was accepted under'],
@@ -746,15 +746,15 @@ const TEXT = {
   'setup.repositoryMissing': ['仓库目录 {repository} 不存在，或不是绝对路径。', SETUP_PROBLEMS.repositoryMissing[1]],
   'setup.repositoryNotGit': ['{repository} 不是 git 检出。', SETUP_PROBLEMS.repositoryNotGit[1]],
   'setup.planDirectoryMissing': ['计划目录 {directory} 不存在。', SETUP_PROBLEMS.planDirectoryMissing[1]],
-  'setup.foreignFile': ['{file} 不是 dsh-superagent 写入的文件；移走它，或换一个状态目录。', SETUP_PROBLEMS.foreignFile[1]],
+  'setup.foreignFile': ['{file} 不是 super-coding-agent 写入的文件；移走它，或换一个状态目录。', SETUP_PROBLEMS.foreignFile[1]],
   'setup.environmentFailed': ['准备智能体的运行环境失败。', SETUP_PROBLEMS.environmentFailed[1]],
   'healthCode.setupPending': ['等待部署检查', HEALTH_TEXT.setupPending],
   'healthCode.sourceOff': ['已关闭', HEALTH_TEXT.sourceOff],
   'healthCode.pollFailures': ['连续 {count} 次轮询失败，最近一次：{error}', HEALTH_TEXT.pollFailures],
   'healthCode.planDirectoryMissing': ['计划目录 {directory} 不存在', HEALTH_TEXT.planDirectoryMissing],
 } as const satisfies Record<string, readonly [string, string]>
-export type DshSuperagentKey = keyof typeof TEXT
-const language = (index: 0 | 1) => Object.fromEntries(Object.entries(TEXT).map(([key, pair]) => [key, pair[index]])) as Record<DshSuperagentKey, string>
+export type SuperCodingAgentKey = keyof typeof TEXT
+const language = (index: 0 | 1) => Object.fromEntries(Object.entries(TEXT).map(([key, pair]) => [key, pair[index]])) as Record<SuperCodingAgentKey, string>
 export const zh = language(0), en = language(1)
 
 /** Glossary terms grouped by stage flow after the acting roles; each key maps to `term.<key>` and `meaning.<key>`. */
@@ -772,5 +772,5 @@ export const GLOSSARY_VALUES = {
 } as const
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap { dshSuperagent: DshSuperagentKey }
+  interface LocaleNamespaceMap { superCodingAgent: SuperCodingAgentKey }
 }

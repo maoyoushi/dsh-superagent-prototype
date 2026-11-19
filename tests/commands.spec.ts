@@ -12,12 +12,12 @@ it('runs git in the directory it names and preserves literal shell metacharacter
   expect(await commands().run('printf', ['%s', '`whoami` $(touch x)'])).toBe('`whoami` $(touch x)')
 })
 it('runs every command with its environment over the process environment, where undefined removes a variable', async () => {
-  process.env.DSH_SUPERAGENT_AMBIENT = 'host'
+  process.env.SUPER_CODING_AGENT_AMBIENT = 'host'
   try {
-    const output = await new Commands(() => deployment, { DSH_SUPERAGENT_AMBIENT: undefined, DSH_SUPERAGENT_PROBE: 'agent' }, new AbortController().signal).run('env', [])
-    expect(output).toContain('DSH_SUPERAGENT_PROBE=agent')
-    expect(output).not.toContain('DSH_SUPERAGENT_AMBIENT=')
-  } finally { delete process.env.DSH_SUPERAGENT_AMBIENT }
+    const output = await new Commands(() => deployment, { SUPER_CODING_AGENT_AMBIENT: undefined, SUPER_CODING_AGENT_PROBE: 'agent' }, new AbortController().signal).run('env', [])
+    expect(output).toContain('SUPER_CODING_AGENT_PROBE=agent')
+    expect(output).not.toContain('SUPER_CODING_AGENT_AMBIENT=')
+  } finally { delete process.env.SUPER_CODING_AGENT_AMBIENT }
 })
 it('reports failures that print a JSON error with their code and without command arguments', () => {
   const failed = commandError({ stderr: '[page 1] fetching...\n' + JSON.stringify({ error: { code: 232011, message: 'operator is not in the chat' } }) })

@@ -69,8 +69,8 @@ it('shows a Ticket with its stage, its Mandate details with the Trigger and Deci
   expect(all('.dt-disclosure-body a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['聊天消息',
     'https://chat.example.test/oc_1/om_root'], ['计划文件', 'file:///repo/docs/plans/login.md']])
   await click(zh['term.environment'])
-  expect(all('.dt-disclosure-body .dt-table tr').map(row => row.textContent)).toEqual(['DSH_SUPERAGENT_DIR/w/t1',
-    'DSH_SUPERAGENT_PLAN_FILE—'])
+  expect(all('.dt-disclosure-body .dt-table tr').map(row => row.textContent)).toEqual(['SUPER_CODING_AGENT_DIR/w/t1',
+    'SUPER_CODING_AGENT_PLAN_FILE—'])
   await click(document.querySelector<HTMLElement>('.dt-trigger-link')!)
   expect(tab(zh['tab.trigger']).getAttribute('aria-selected')).toBe('true')
 })
@@ -156,11 +156,11 @@ it('says why an Input was not delivered on its Ticket\'s page, in either languag
   expect(text()).toContain(en.inputRetryHint)
 })
 
-it('tells a Ticket or Thread that does not exist from a dsh-superagent that is not answering', async () => {
+it('tells a Ticket or Thread that does not exist from a super-coding-agent that is not answering', async () => {
   at({ page: 'execution', id: 't9' })
   await mount()
   expect(text()).toContain(zh.ticketNotFound)
-  // While dsh-superagent restarts, DSH's web server answers every route with an empty 404.
+  // While super-coding-agent restarts, DSH's web server answers every route with an empty 404.
   at({ page: 'execution', id: 't1' })
   server.down = true
   await remount()

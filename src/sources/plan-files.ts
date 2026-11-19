@@ -7,7 +7,7 @@ import { key } from '../core/index.ts'
 export const PLAN_MAX_BYTES = 2 * 1024 * 1024
 /** How deep below the plan directory files are read. */
 const MAX_DEPTH = 8
-/** Directories never read: hidden ones, such as `.superagent` where replies are logged, and dependencies. */
+/** Directories never read: hidden ones, such as `.super-coding-agent` where replies are logged, and dependencies. */
 const skipped = (name: string): boolean => name.startsWith('.') || name === 'node_modules'
 
 /** One plan file: its path relative to the plan directory with `/` separators, its absolute path, text, hash and change time. */

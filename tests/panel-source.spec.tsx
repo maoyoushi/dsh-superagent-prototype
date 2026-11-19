@@ -93,7 +93,7 @@ it('renders each Source\'s settings from its kind\'s fields and saves one Source
   expect(server.revisions['source:plan']).toBe(6)
 })
 
-it('shows the fact a Source states about a saved setup field, and keeps a saved repository on screen while dsh-superagent restarts', async () => {
+it('shows the fact a Source states about a saved setup field, and keeps a saved repository on screen while super-coding-agent restarts', async () => {
   await mount()
   await click(tab(zh['tab.settings']))
   const plan = all('.dt-card')[1]!
@@ -111,14 +111,14 @@ it('shows the fact a Source states about a saved setup field, and keeps a saved 
   await click([...plan.querySelectorAll<HTMLElement>('[data-disclosure-row]')].find(row => row.textContent?.includes('高级'))!)
   expect(labels()).toEqual(['仓库目录', '计划目录', '检查间隔 / 秒', '连续失败几次后报告异常'])
   await type(field<HTMLInputElement>('仓库目录'), '/opt/repo')
-  expect(plan.textContent).toContain('保存会重启 dsh-superagent：2 个进行中的派工会中断，并带恢复说明重新开始。')
+  expect(plan.textContent).toContain('保存会重启 super-coding-agent：2 个进行中的派工会中断，并带恢复说明重新开始。')
   await act(async () => { plan.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
   expect(server.settings.sources.plan!.config).toMatchObject({ repository: '/opt/repo' })
   expect(text()).toContain(zh.savedRestarting)
-  // The saved value stays, and the card's fields are disabled, until the saved revision returns with the restarted dsh-superagent.
+  // The saved value stays, and the card's fields are disabled, until the saved revision returns with the restarted super-coding-agent.
   expect(field<HTMLInputElement>('仓库目录').value).toBe('/opt/repo')
   expect(field('仓库目录').matches(':disabled')).toBe(true)
-  expect(sessionStorage.getItem('dsh-superagent/draft/master/source:plan')).toBeNull()
+  expect(sessionStorage.getItem('super-coding-agent/draft/master/source:plan')).toBeNull()
 })
 
 it('points a setup problem at the settings that fix it', async () => {
@@ -141,7 +141,7 @@ it('points a setup problem at the settings that fix it', async () => {
   delete (Element.prototype as Partial<Element>).scrollIntoView
   await click(find(zh['settingsGroup.deployment'], '.dt-settings-link'))
   expect(text()).toContain('部署检查未通过：计划文件来源没有填写仓库目录。')
-  // After a fix outside dsh-superagent, a check runs setup again.
+  // After a fix outside super-coding-agent, a check runs setup again.
   await click(zh.setupCheck)
   expect(server.requests.filter(request => request.path === 'setup/check')).toEqual([{ path: 'setup/check', method: 'POST' }])
   expect(text()).toContain(zh.setupChecking)
@@ -244,7 +244,7 @@ it('takes no space for messages that were all sent', async () => {
   expect(text()).not.toContain(zh.sourceDroppedTitle)
 })
 
-it('reads the settings again as soon as dsh-superagent answers after a save restarted it', async () => {
+it('reads the settings again as soon as super-coding-agent answers after a save restarted it', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
   onTestFinished(() => { vi.useRealTimers() })
   at({ page: 'settings', query: { group: 'source' } })
@@ -253,7 +253,7 @@ it('reads the settings again as soon as dsh-superagent answers after a save rest
   const plan = all('.dt-card')[1]!
   await act(async () => { plan.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
   expect(field('仓库目录').matches(':disabled')).toBe(true)
-  // dsh-superagent restarts: DSH answers with empty 404s, then it answers again.
+  // super-coding-agent restarts: DSH answers with empty 404s, then it answers again.
   server.down = true
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) }); await settle()
   server.down = false

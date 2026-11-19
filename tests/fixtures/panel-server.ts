@@ -71,7 +71,7 @@ export const droppedReply = (id: string, hoursAgo: number, source: 'chat' | 'pla
   { ticket, thread }: { ticket?: DroppedReply['ticket']; thread?: false } = {}): DroppedReply => ({
   id, preview: `Reply ${id}`, kind: 'reply',
   channel: source === 'chat' ? { source: 'chat', thread: 'chat:oc_1', address: { chatId: 'oc_1', messageId: 'om_root' } }
-    : { source: 'plan', thread: 'login.md', address: { path: 'login.md', file: '/repo/docs/plans/login.md', log: '/repo/docs/plans/.superagent/login.md.log.md' } },
+    : { source: 'plan', thread: 'login.md', address: { path: 'login.md', file: '/repo/docs/plans/login.md', log: '/repo/docs/plans/.super-coding-agent/login.md.log.md' } },
   dropped: { at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(), reason }, ...ticket ? { ticket } : {},
   ...thread === false ? {} : { thread: source === 'chat' ? 'chat:oc_1:om_root' : 'plan:login.md' },
 })
@@ -81,7 +81,7 @@ export const problemOf = (code: SetupCode, values: Record<string, string> = {}) 
 // states a fact about its saved repository, as a kind may, which the panel shows beside that field.
 const KINDS = [chatKind, { ...planKind, facts: (deployment): Record<string, Localized> => deployment ? { repository: { zh: `已检出 ${deployment.repository}`,
   en: `Checked out at ${deployment.repository}` } } : {} } satisfies typeof planKind] as unknown as SourceKind[]
-export const MACHINE = { stateDir: '/srv/dsh-superagent', promptMaxChars: 100000, admissionContextMaxPages: 10,
+export const MACHINE = { stateDir: '/srv/super-coding-agent', promptMaxChars: 100000, admissionContextMaxPages: 10,
   admissionContextTimeoutMs: 15000 }
 
 type Settings = ReturnType<typeof SettingsSchema.parse>
@@ -172,11 +172,11 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
     subagents: { value: server.settings.subagents, revision: server.revisions.subagents ?? 0 } },
   subagents: server.subagents,
   sources: sourceSettings(),
-  environment: { root: '/srv/dsh-superagent/work', variables: [
-    { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
+  environment: { root: '/srv/super-coding-agent/work', variables: [
+    { owner: 'executor', enabled: true, variables: [{ key: 'SUPER_CODING_AGENT_DIR', description: { zh: '工单的执行目录',
       en: 'The ticket directory' } },
-      { key: 'DSH_SUPERAGENT_NAME', description: { zh: '工单短名', en: 'Short name' } }] },
-    { owner: 'plan', enabled: false, variables: [{ key: 'DSH_SUPERAGENT_REPOSITORY', description: { zh: '仓库',
+      { key: 'SUPER_CODING_AGENT_NAME', description: { zh: '工单短名', en: 'Short name' } }] },
+    { owner: 'plan', enabled: false, variables: [{ key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '仓库',
       en: 'Repository' } }] }] },
 })
 const overviewView = (): ApiResponse<'GET overview'> => {
@@ -211,8 +211,8 @@ const ticketDetail = (): TicketPageView => ({
   mandate: { strength: 'explicit', policyVersion: 'abcdef1234567890', basis: { via: 'addressed', sender: 'Alice', addressed: 'mention' },
     actor: actor('chat', MEMBER), scope: '修复登录页回归' },
   basis: { facts: [{ name: 'sender', value: 'Alice' }, { name: 'addressed', value: 'mention' }], legacy: false },
-  environment: [{ key: 'DSH_SUPERAGENT_DIR', value: '/w/t1', description: { zh: '执行目录', en: 'Directory' }, owner: 'executor' },
-    { key: 'DSH_SUPERAGENT_PLAN_FILE', value: '', description: { zh: '计划文件', en: 'Plan file' }, owner: 'plan' }],
+  environment: [{ key: 'SUPER_CODING_AGENT_DIR', value: '/w/t1', description: { zh: '执行目录', en: 'Directory' }, owner: 'executor' },
+    { key: 'SUPER_CODING_AGENT_PLAN_FILE', value: '', description: { zh: '计划文件', en: 'Plan file' }, owner: 'plan' }],
   channels: [{ source: 'chat', url: 'https://chat.example.test/oc_1/om_root', label: { zh: '聊天消息', en: 'Chat message' } },
     { source: 'plan', url: 'file:///repo/docs/plans/login.md', label: { zh: '计划文件', en: 'Plan file' } }],
   assignments: [{ id: 'a1', state: 'running', createdAt: '2026-09-22T00:00:00Z',

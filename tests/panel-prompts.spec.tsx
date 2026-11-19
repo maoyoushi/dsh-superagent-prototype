@@ -47,7 +47,7 @@ it('adds a team skill, but none with an invalid or a taken name, and previews it
   await mount()
   await type(field<HTMLInputElement>(zh.promptAddSkill), 'testing')
   await click(zh.promptAddSkillAction)
-  expect(all('.dt-nav-item').map(item => item.textContent)).toContain('dsh-superagent-testing')
+  expect(all('.dt-nav-item').map(item => item.textContent)).toContain('super-coding-agent-testing')
   for (const name of ['Bad Name', 'testing']) {
     await type(field<HTMLInputElement>(zh.promptAddSkill), name)
     await click(zh.promptAddSkillAction)

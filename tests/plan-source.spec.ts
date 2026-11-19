@@ -27,8 +27,8 @@ it('takes the plans present at its first check as a baseline, and receives each 
   write('auth/login.md', '# Login\n- [ ] Add rate limiting\nAcceptance: pnpm test passes')
   expect(await checkPlans(ctx, config())).toBe(1)
   // An unchanged directory receives nothing; a hidden directory, such as the reply log's, is never read.
-  mkdirSync(join(repository, 'plans', '.superagent'), { recursive: true })
-  writeFileSync(join(repository, 'plans', '.superagent', 'x.md'), 'log')
+  mkdirSync(join(repository, 'plans', '.super-coding-agent'), { recursive: true })
+  writeFileSync(join(repository, 'plans', '.super-coding-agent', 'x.md'), 'log')
   expect(await checkPlans(ctx, config())).toBe(0)
   await h.runtime.idle()
   const trigger = triggerOf('auth/login.md', '# Login\n- [ ] Add rate limiting\nAcceptance: pnpm test passes')
@@ -42,8 +42,8 @@ it('takes the plans present at its first check as a baseline, and receives each 
   await h.runtime.idle()
   const ticket = h.runtime.store.tickets.get((result.ticket as { ticket_id: string }).ticket_id)!
   expect(Object.fromEntries(h.runtime.ticketEnvironment(ticket).map(item => [item.key, item.value]))).toMatchObject({
-    DSH_SUPERAGENT_REPOSITORY: repository, DSH_SUPERAGENT_PLAN_DIR: join(repository, 'plans'),
-    DSH_SUPERAGENT_PLAN_FILE: join(repository, 'plans', 'auth/login.md') })
+    SUPER_CODING_AGENT_REPOSITORY: repository, SUPER_CODING_AGENT_PLAN_DIR: join(repository, 'plans'),
+    SUPER_CODING_AGENT_PLAN_FILE: join(repository, 'plans', 'auth/login.md') })
   // A change to the plan is a new Trigger on the same Thread, which reaches the open Ticket.
   write('auth/login.md', '# Login\n- [ ] Add rate limiting\n- [ ] Log refusals')
   expect(await checkPlans(ctx, config())).toBe(1)

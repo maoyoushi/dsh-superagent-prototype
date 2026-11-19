@@ -3,7 +3,7 @@ import { fill } from './infra/text.ts'
 
 export type SetupPlace = 'deployment' | 'plan'
 export const SETUP_PROBLEMS = {
-  foreignFile: ['deployment', '{file} was not written by dsh-superagent; move it, or choose another state directory.'],
+  foreignFile: ['deployment', '{file} was not written by super-coding-agent; move it, or choose another state directory.'],
   environmentFailed: ['deployment', 'Preparing the agent environment failed.'],
   repositoryUnset: ['plan', 'The plan Source names no repository directory.'],
   repositoryMissing: ['plan', 'The repository directory {repository} does not exist or is not an absolute path.'],

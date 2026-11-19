@@ -13,8 +13,8 @@ import { packagePath } from '../src/infra/paths.ts'
 import type { Variable } from '../src/app/execution-environment.ts'
 
 /** The execution environment outside any ticket, as the runtime passes it once setup has finished. */
-const variables = (): Variable[] => [{ key: 'DSH_SUPERAGENT_REPOSITORY', value: '/srv/widgets', description: { zh: '仓库', en: 'The repository' }, owner: 'plan' }]
-const ENVIRONMENT_LINE = '- DSH_SUPERAGENT_REPOSITORY = "/srv/widgets": The repository.'
+const variables = (): Variable[] => [{ key: 'SUPER_CODING_AGENT_REPOSITORY', value: '/srv/widgets', description: { zh: '仓库', en: 'The repository' }, owner: 'plan' }]
+const ENVIRONMENT_LINE = '- SUPER_CODING_AGENT_REPOSITORY = "/srv/widgets": The repository.'
 const promptsOf = (store: Store, maxChars = 100000) => new Prompts(store, () => maxChars, variables)
 function withStore(body: (store: Store, dir: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'prompts-')); const store = new Store(join(dir, 'db'))
@@ -103,11 +103,11 @@ it('rejects unknown keys, invalid skill names and oversized configuration before
 
 it('lists a ticket\'s execution environment in its prompt, and says setup is incomplete before setup finished', () => {
   withStore(store => {
-    const ticket: Variable[] = [{ key: 'DSH_SUPERAGENT_DIR', value: '/srv/work/fix-1', description: { zh: '', en: 'This ticket\'s directory' }, owner: 'executor' }]
-    expect(promptsOf(store).compose(defaultPrompts(), 'worker', ticket).endsWith('- DSH_SUPERAGENT_DIR = "/srv/work/fix-1": This ticket\'s directory.')).toBe(true)
+    const ticket: Variable[] = [{ key: 'SUPER_CODING_AGENT_DIR', value: '/srv/work/fix-1', description: { zh: '', en: 'This ticket\'s directory' }, owner: 'executor' }]
+    expect(promptsOf(store).compose(defaultPrompts(), 'worker', ticket).endsWith('- SUPER_CODING_AGENT_DIR = "/srv/work/fix-1": This ticket\'s directory.')).toBe(true)
     expect(promptParts(defaultPrompts(), 'worker', 'env').at(-1)).toEqual({ name: 'runtime/environment', kind: 'generated', key: 'runtime/environment',
       text: 'env' })
-    expect(new Prompts(store, () => 100000, () => undefined).compose(defaultPrompts(), 'worker')).toContain('dsh-superagent is waiting for setup')
+    expect(new Prompts(store, () => 100000, () => undefined).compose(defaultPrompts(), 'worker')).toContain('super-coding-agent is waiting for setup')
   })
 })
 
@@ -245,8 +245,8 @@ describe('delegation', () => {
   it('gives only the worker the delegation part: bounded subtasks, self-contained briefs, checkpoints and the role tools', () => {
     const worker = composePrompt(defaultPrompts(), 'worker'), orchestrator = composePrompt(defaultPrompts(), 'orchestrator')
     expect(worker).toContain('## delegation\n')
-    for (const phrase of ['$DSH_SUPERAGENT_SUBTASK_MINUTES minutes', 'Never delegate the whole plan', '$DSH_SUPERAGENT_DEVELOP_TOOL develops',
-      '$DSH_SUPERAGENT_VERIFY_TOOL verifies', 'each brief stands alone', 'commit a checkpoint', 'restore the ticket directory to the checkpoint',
+    for (const phrase of ['$SUPER_CODING_AGENT_SUBTASK_MINUTES minutes', 'Never delegate the whole plan', '$SUPER_CODING_AGENT_DEVELOP_TOOL develops',
+      '$SUPER_CODING_AGENT_VERIFY_TOOL verifies', 'each brief stands alone', 'commit a checkpoint', 'restore the ticket directory to the checkpoint',
       'Report ready only when every acceptance criterion']) expect(worker).toContain(phrase)
     expect(orchestrator).not.toContain('## delegation')
   })

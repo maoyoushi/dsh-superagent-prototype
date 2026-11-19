@@ -106,6 +106,6 @@ it('names each role\'s tool and the subtask bound in a ticket\'s execution envir
     maxSubtaskMinutes: 45 } })
   const { ticket } = await host.acceptedTicket(chat('1', '修复登录页'))
   expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({
-    DSH_SUPERAGENT_DEVELOP_TOOL: 'subagent_codex', DSH_SUPERAGENT_VERIFY_TOOL: 'worker', DSH_SUPERAGENT_REVIEW_TOOL: 'subagent_claude_code',
-    DSH_SUPERAGENT_SUBTASK_MINUTES: '45' })
+    SUPER_CODING_AGENT_DEVELOP_TOOL: 'subagent_codex', SUPER_CODING_AGENT_VERIFY_TOOL: 'worker', SUPER_CODING_AGENT_REVIEW_TOOL: 'subagent_claude_code',
+    SUPER_CODING_AGENT_SUBTASK_MINUTES: '45' })
 })

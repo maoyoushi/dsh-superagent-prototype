@@ -1,4 +1,4 @@
-/** The plan Channel: replies to a plan file are appended to its log under `<plan directory>/.superagent/`, never to the plan. */
+/** The plan Channel: replies to a plan file are appended to its log under `<plan directory>/.super-coding-agent/`, never to the plan. */
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -6,7 +6,7 @@ import type { OutboundMessage } from '../core/index.ts'
 import type { SourceChannel } from './kind.ts'
 
 /** The directory, below the plan directory, that holds each plan file's log. */
-export const LOG_DIRECTORY = '.superagent'
+export const LOG_DIRECTORY = '.super-coding-agent'
 /** The log of the plan file at `path` (relative to the plan directory `root`). */
 export const planLog = (root: string, path: string): string => join(root, LOG_DIRECTORY, `${path}.log.md`)
 /** The marker a sent message leaves in the log, which makes a resend of the same message id a no-op. */
