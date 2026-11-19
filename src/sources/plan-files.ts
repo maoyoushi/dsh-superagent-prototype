@@ -13,19 +13,24 @@ const skipped = (name: string): boolean => name.startsWith('.') || name === 'nod
 /** One plan file: its path relative to the plan directory with `/` separators, its absolute path, text, hash and change time. */
 export interface PlanFile { path: string; file: string; text: string; hash: string; at: string }
 
-/** Every plan file below `root`, sorted by path; files larger than `PLAN_MAX_BYTES` are counted in `skipped` instead. */
+/** Every plan file below `root`, sorted by path; files larger than `PLAN_MAX_BYTES`, and unreadable entries, are named in `skipped` instead. */
 export async function planFiles(root: string): Promise<{ files: PlanFile[]; skipped: string[] }> {
   const files: PlanFile[] = [], large: string[] = []
   const walk = async (directory: string, depth: number): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+    // An unreadable directory or file below the root is skipped and named, so one entry cannot stop every check.
+    const entries = depth === 0 ? await readdir(directory, { withFileTypes: true })
+      : await readdir(directory, { withFileTypes: true }).catch(() => { large.push(`${relative(root, directory).split(sep).join('/')}/`); return [] })
+    for (const entry of entries) {
       const file = join(directory, entry.name)
       if (entry.isDirectory()) { if (!skipped(entry.name) && depth < MAX_DEPTH) await walk(file, depth + 1); continue }
       if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue
-      const info = await stat(file)
       const path = relative(root, file).split(sep).join('/')
-      if (info.size > PLAN_MAX_BYTES) { large.push(path); continue }
-      const text = (await readFile(file, 'utf8')).replaceAll('\r\n', '\n')
-      files.push({ path, file, text, hash: key('plan-file', text), at: info.mtime.toISOString() })
+      try {
+        const info = await stat(file)
+        if (info.size > PLAN_MAX_BYTES) { large.push(path); continue }
+        const text = (await readFile(file, 'utf8')).replaceAll('\r\n', '\n')
+        files.push({ path, file, text, hash: key('plan-file', text), at: info.mtime.toISOString() })
+      } catch { large.push(path) }
     }
   }
   await walk(root, 0)

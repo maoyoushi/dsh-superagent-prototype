@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Super Coding Agent",
-    "description": "Watch one GitHub repository, turn authorized requests into Tickets, and execute each in its own DSH Session."
+    "description": "Watch a plan directory in one local git repository, turn plan files into Tickets, and run each in its own DSH Session that delegates bounded subtasks to Claude Code and Codex."
   }
 }

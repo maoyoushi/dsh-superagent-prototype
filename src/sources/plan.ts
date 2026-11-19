@@ -50,7 +50,12 @@ export const planKind: SourceKind<PlanConfig> = {
       ? { messages: [{ id: trigger.id, from: OPERATOR, at: trigger.at, text: trigger.text, path: String(trigger.meta.path ?? '') }], body: {} }
       : { messages: [], body: {} },
   },
-  find: query => /\.md$/i.test(query.trim()) ? { threads: [`${SOURCE}:${query.trim().replace(/^\.?\//, '')}`], terms: [] } : { threads: [], terms: [] },
+  // A plan named by a longer path, such as its path in the repository, matches the Thread of each of its path's suffixes.
+  find: query => {
+    const parts = query.trim().replace(/^\.?\//, '').split('/')
+    if (!/\.md$/i.test(parts.at(-1) ?? '')) return { threads: [], terms: [] }
+    return { threads: parts.map((_, at) => `${SOURCE}:${parts.slice(at).join('/')}`), terms: [] }
+  },
   policy: {
     schema: z.object({ allowed: z.array(z.object({ id: z.string().trim().min(1).max(200), name: z.string().trim().max(100).optional() }).strict())
       .default([{ id: OPERATOR, name: 'Operator' }]) }).strict(),
@@ -61,18 +66,20 @@ export const planKind: SourceKind<PlanConfig> = {
   },
   environment: {
     variables: [
-      { key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '本地 git 检出的绝对路径', en: 'Absolute path of the local git checkout' } },
       { key: 'SUPER_CODING_AGENT_PLAN_DIR', description: { zh: '计划目录的绝对路径', en: 'Absolute path of the plan directory' } },
       { key: 'SUPER_CODING_AGENT_PLAN_FILE', description: { zh: '这个工单来源计划文件的绝对路径；不要修改它', en: 'Absolute path of this ticket\'s plan file; never edit it' } }],
-    values: ({ deployment, trigger }) => ({ SUPER_CODING_AGENT_REPOSITORY: deployment.repository, SUPER_CODING_AGENT_PLAN_DIR: deployment.plan.directory,
+    values: ({ deployment, trigger }) => ({ SUPER_CODING_AGENT_PLAN_DIR: deployment.plan.directory,
       SUPER_CODING_AGENT_PLAN_FILE: typeof trigger?.meta.file === 'string' ? trigger.meta.file : '' }),
   },
 }
 
-/** The Trigger of one revision of a plan file: the operator's direct request, on the Thread of that file. */
-export function planTrigger(root: string, plan: PlanFile): Trigger {
+/**
+ * The Trigger of one revision of a plan file: the operator's direct request, on the Thread of that file. `revision` counts the
+ * file's received revisions, so content it had before, such as after a revert, is a new Trigger rather than a duplicate.
+ */
+export function planTrigger(root: string, plan: PlanFile, revision = 1): Trigger {
   const address = { path: plan.path, file: plan.file, log: planLog(root, plan.path) }
-  return { id: key(SOURCE, plan.path, plan.hash), source: SOURCE, threads: [{ source: SOURCE, id: plan.path }], actor: { source: SOURCE, id: OPERATOR },
+  return { id: key(SOURCE, plan.path, plan.hash, String(revision)), source: SOURCE, threads: [{ source: SOURCE, id: plan.path }], actor: { source: SOURCE, id: OPERATOR },
     human: true, addressed: 'direct', at: plan.at, text: plan.text, channel: { source: SOURCE, thread: `${SOURCE}:${plan.path}`, address },
     url: pathToFileURL(plan.file).href, meta: { path: plan.path, file: plan.file, hash: plan.hash } }
 }
@@ -94,15 +101,23 @@ export async function checkPlans(ctx: SourceContext, config: PlanConfig): Promis
   for (const plan of files) {
     const seen = ctx.state.get(KV.plan.file(root, plan.path))
     if (seen?.hash === plan.hash) continue
+    const revision = (seen?.revision ?? 0) + 1
     if (!(baseline && !config.includeExisting)) {
-      await ctx.receive(planTrigger(root, plan))
+      const result = await ctx.receive(planTrigger(root, plan, revision))
       ctx.threads.describe(`${SOURCE}:${plan.path}`, { label: plan.path, url: pathToFileURL(plan.file).href })
-      received += 1
+      if (result !== 'duplicate') received += 1
     }
-    ctx.state.set(KV.plan.file(root, plan.path), { hash: plan.hash, at: plan.at })
+    ctx.state.set(KV.plan.file(root, plan.path), { hash: plan.hash, at: plan.at, revision })
+  }
+  // A deleted plan is forgotten, so restoring it is received again; its revision count goes on from where it was.
+  const present = new Set(files.map(plan => plan.path)), prefix = KV.plan.file(root, '')
+  for (const name of ctx.state.keys(KV.plan.file)) {
+    const path = name.startsWith(prefix) ? name.slice(prefix.length) : undefined
+    const stored = path === undefined || present.has(path) ? undefined : ctx.state.get(name)
+    if (stored) ctx.state.set(name, { hash: '', at: stored.at, revision: stored.revision ?? 1 })
   }
   ctx.state.set(KV.plan.root, root)
-  const large = skipped.length ? `; skipped as too large: ${skipped.join(', ')}` : ''
+  const large = skipped.length ? `; skipped as too large or unreadable: ${skipped.join(', ')}` : ''
   ctx.report('plan', { state: 'ready', detail: `${files.length} plan files in ${root}; ${received} received${large}`, at: new Date().toISOString() })
   return received
 }

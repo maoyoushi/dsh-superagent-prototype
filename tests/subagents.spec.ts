@@ -5,6 +5,12 @@ import { UserError } from '../src/core/index.ts'
 import type { Health } from '../src/sources/host.ts'
 import { SettingsSchema, SubagentsConfigSchema, type Settings, type SubagentProvider } from '../src/policy.ts'
 import { Subagents, providerEnv, type Probe, type ProviderPlugin } from '../src/app/subagents.ts'
+import { DEFAULT_PREPARE } from '../src/policy.ts'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { gitEnv } from './fixtures/git.ts'
 import { chat, startRuntime, type Host } from './fixtures/host.ts'
 
 /** A Subagents on a bare Cordis context, with fake providers that record what they were mounted with and when they were released. */
@@ -16,10 +22,11 @@ function harness(probe: Probe) {
     mounted.push({ provider, env: config.env ?? {} })
     ctx.effect(() => () => { released.push(provider) })
   } })
+  const changed = vi.fn()
   const subagents = new Subagents({ context: new Context(), settings: () => settings, lifetime: new AbortController().signal, cwd: '/tmp',
-    health: { get: () => health, set: value => { health = value }, release: () => {} }, probe, load: async provider => plugin(provider) })
+    health: { get: () => health, set: value => { health = value }, release: () => {} }, probe, load: async provider => plugin(provider), changed })
   const set = (value: unknown) => { settings = SettingsSchema.parse({ subagents: value }) }
-  return { subagents, mounted, released, set, health: () => health, current: () => settings.subagents }
+  return { subagents, mounted, released, set, changed, health: () => health, current: () => settings.subagents }
 }
 const versions: Probe = async argv => argv[0] === 'claude' ? '2.1.327 (Claude Code)\n' : 'codex-cli 0.158.0\n'
 const missing: Probe = async argv => { throw new Error(`${argv[0]} is not an executable file on PATH`) }
@@ -108,4 +115,77 @@ it('names each role\'s tool and the subtask bound in a ticket\'s execution envir
   expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({
     SUPER_CODING_AGENT_DEVELOP_TOOL: 'subagent_codex', SUPER_CODING_AGENT_VERIFY_TOOL: 'worker', SUPER_CODING_AGENT_REVIEW_TOOL: 'subagent_claude_code',
     SUPER_CODING_AGENT_SUBTASK_MINUTES: '45' })
+})
+
+it('tells live workers when the mounted providers change, and only then', async () => {
+  const h = harness(versions)
+  h.set({ codex: { enabled: true } })
+  await h.subagents.install()
+  expect(h.changed).toHaveBeenCalledOnce()
+  await h.subagents.sync()
+  expect(h.changed).toHaveBeenCalledOnce()
+  h.set({ codex: { enabled: false } })
+  await h.subagents.sync()
+  expect(h.changed).toHaveBeenCalledTimes(2)
+})
+
+it('refuses a command that does not name the provider\'s executable, and runs the checked binary by putting its directory first on PATH', async () => {
+  const h = harness(versions)
+  await expect(h.subagents.check(SubagentsConfigSchema.parse({ codex: { enabled: true, command: '/opt/bin/not-codex' } }), h.current()))
+    .rejects.toMatchObject({ code: 'subagentUnavailable', values: { provider: 'Codex' } })
+  await expect(h.subagents.check(SubagentsConfigSchema.parse({ codex: { enabled: true, command: '/opt/codex/bin/codex' } }), h.current()))
+    .resolves.toBeUndefined()
+  expect(providerEnv(SubagentsConfigSchema.parse({ codex: { command: '/opt/codex/bin/codex' } }), 'codex', '/usr/bin:/bin')).toEqual({ PATH: '/opt/codex/bin:/usr/bin:/bin' })
+  expect(providerEnv(SubagentsConfigSchema.parse({}), 'codex', '/usr/bin')).toEqual({})
+})
+
+it('keeps a mounted provider\'s status when a save that changes its command is refused, and forgets a disabled provider\'s check', async () => {
+  let fail = false
+  const h = harness(async argv => { if (fail) throw new Error('no such file'); return versions(argv, new AbortController().signal) })
+  h.set({ codex: { enabled: true } })
+  await h.subagents.install()
+  fail = true
+  await expect(h.subagents.check(SubagentsConfigSchema.parse({ codex: { enabled: true, command: '/missing/codex' } }), h.current())).rejects.toThrow(UserError)
+  expect(h.subagents.status().codex).toMatchObject({ mounted: true, available: true, version: 'codex-cli 0.158.0' })
+  h.set({ codex: { enabled: false } })
+  await h.subagents.sync()
+  expect(h.subagents.status().codex).toEqual({ enabled: false, mounted: false, available: null, version: '', error: '' })
+})
+
+it('reports the providers as waiting while setup waits', async () => {
+  const h = harness(versions)
+  h.subagents.pending()
+  expect(h.health()).toMatchObject({ state: 'paused', detail: 'Waiting for the deployment check' })
+})
+
+it('applies a live worker\'s tool limits again when the providers change, and names the repository for prepare commands with the plan Source off', async () => {
+  host = await startRuntime()
+  const { ticket, sessionId } = await host.acceptedTicket(chat('1', '@bot 修复登录页'))
+  const tools = (host.agents.get(sessionId) as unknown as { ctx: Context }).ctx.get('tools') as unknown as { restrict: ReturnType<typeof vi.fn> }
+  const before = tools.restrict.mock.calls.length
+  host.runtime.sessions.refreshWork()
+  expect(tools.restrict.mock.calls.length).toBe(before + 1)
+  const settings = host.runtime.store.settings()
+  host.runtime.store.saveSettings({ ...settings, sources: { ...settings.sources, plan: { ...settings.sources.plan!, enabled: false } } })
+  const env = Object.fromEntries(host.runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))
+  expect(env.SUPER_CODING_AGENT_REPOSITORY).toBe(host.runtime.deployment.repository)
+  expect(env).not.toHaveProperty('SUPER_CODING_AGENT_PLAN_DIR')
+})
+
+it('prepares a worktree on the ticket\'s branch with the default command, and reuses the branch when an earlier attempt left it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'prepare-'))
+  const repo = join(root, 'repo'), env = gitEnv({ GIT_AUTHOR_NAME: 'Op', GIT_AUTHOR_EMAIL: 'op@example.test', GIT_COMMITTER_NAME: 'Op',
+    GIT_COMMITTER_EMAIL: 'op@example.test' }) as NodeJS.ProcessEnv
+  try {
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { env })
+    execFileSync('git', ['-C', repo, 'commit', '-q', '--allow-empty', '-m', 'init'], { env })
+    const run = (dir: string) => execFileSync('sh', ['-c', DEFAULT_PREPARE], { cwd: root, env: { ...env, SUPER_CODING_AGENT_REPOSITORY: repo,
+      SUPER_CODING_AGENT_NAME: 'login-rate-limit-abc', SUPER_CODING_AGENT_DIR: join(root, dir) } })
+    run('work-1')
+    expect(execFileSync('git', ['-C', join(root, 'work-1'), 'branch', '--show-current'], { env }).toString().trim()).toBe('agent/login-rate-limit-abc')
+    // The first directory is gone, as after a failed launch; the branch it created is checked out again.
+    rmSync(join(root, 'work-1'), { recursive: true, force: true })
+    run('work-2')
+    expect(execFileSync('git', ['-C', join(root, 'work-2'), 'branch', '--show-current'], { env }).toString().trim()).toBe('agent/login-rate-limit-abc')
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })

@@ -1,5 +1,5 @@
 /** The plan Source: plan files in a local checkout as Triggers from `operator`, their Tickets, and the reply log. */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { checkPlans, planKind, planRoot, OPERATOR, type PlanConfig } from '../src/sources/plan.ts'
@@ -12,7 +12,7 @@ let h: Host, repository: string, ctx: SourceContext
 const config = (overrides: Partial<PlanConfig> = {}): PlanConfig => planKind.schema.parse({ repository, directory: 'plans', ...overrides })
 const write = (path: string, text: string) => { mkdirSync(join(repository, 'plans', path, '..'), { recursive: true }); writeFileSync(join(repository, 'plans', path), text) }
 /** The stored Trigger of a plan file's revision, by the id the Source derives from its path and content. */
-const triggerOf = (path: string, text: string) => h.runtime.store.triggers.get(key('plan', path, key('plan-file', text)))!
+const triggerOf = (path: string, text: string, revision = 1) => h.runtime.store.triggers.get(key('plan', path, key('plan-file', text), String(revision)))!
 // The host's checkout, whose `plans` directory setup checked, and the plan Source and its operator on the allowed list.
 beforeEach(async () => {
   h = await startRuntime()
@@ -48,7 +48,7 @@ it('takes the plans present at its first check as a baseline, and receives each 
   write('auth/login.md', '# Login\n- [ ] Add rate limiting\n- [ ] Log refusals')
   expect(await checkPlans(ctx, config())).toBe(1)
   await h.runtime.idle()
-  const changed = triggerOf('auth/login.md', '# Login\n- [ ] Add rate limiting\n- [ ] Log refusals')
+  const changed = triggerOf('auth/login.md', '# Login\n- [ ] Add rate limiting\n- [ ] Log refusals', 2)
   expect(changed.threads).toEqual(trigger.threads)
   expect(h.runtime.store.tickets.get(ticket.id)!.inputs.some(input => input.kind === 'trigger' && input.triggerId === changed.id)).toBe(true)
 })
@@ -79,5 +79,30 @@ it('reports a missing plan directory, reads a plan as its Thread\'s one message,
   expect(read.messages).toEqual([{ id: trigger.id, from: OPERATOR, at: trigger.at, text: '# A', path: 'a.md' }])
   expect(await planKind.threadContext!.read(h.runtime.commands, trigger, 'root', undefined, config())).toEqual({ messages: [], body: {} })
   expect(planKind.find!('a.md')).toEqual({ threads: ['plan:a.md'], terms: [] })
+  expect(planKind.find!('docs/plans/a.md').threads).toContain('plan:a.md')
   expect(planKind.find!('rate limiting')).toEqual({ threads: [], terms: [] })
+})
+
+it('receives a plan reverted to earlier content, a deleted plan restored, and skips an unreadable entry without stopping the check', async () => {
+  write('a.md', 'A')
+  expect(await checkPlans(ctx, config({ includeExisting: true }))).toBe(1)
+  write('a.md', 'B')
+  expect(await checkPlans(ctx, config())).toBe(1)
+  // Content the plan had before is a new revision, which becomes a new Trigger rather than a duplicate.
+  write('a.md', 'A')
+  expect(await checkPlans(ctx, config())).toBe(1)
+  expect(triggerOf('a.md', 'A', 3)).toBeDefined()
+  rmSync(join(repository, 'plans', 'a.md'))
+  expect(await checkPlans(ctx, config())).toBe(0)
+  write('a.md', 'A')
+  expect(await checkPlans(ctx, config())).toBe(1)
+  expect(triggerOf('a.md', 'A', 4)).toBeDefined()
+  // A directory the check cannot read is named in health, and the other plans are still received.
+  mkdirSync(join(repository, 'plans', 'locked'))
+  chmodSync(join(repository, 'plans', 'locked'), 0)
+  write('b.md', 'B')
+  try {
+    expect(await checkPlans(ctx, config())).toBe(1)
+    expect(h.runtime.health.plan).toMatchObject({ state: 'ready', detail: expect.stringContaining('unreadable: locked/') })
+  } finally { chmodSync(join(repository, 'plans', 'locked'), 0o755) }
 })

@@ -40,7 +40,9 @@ export interface SessionsHost {
  * What Sessions registered for an agent it decorated: the releases of its prompt section, tools and skill scope, the scope
  * its skills are registered in, and the skills of one prompt revision; for a worker's subagent, only its tool limits.
  */
-interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true }
+interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true
+  /** A worker's or its subagent's tool limits, which `refreshWork` applies again when the profile's tools change. */
+  work?: { ticketId: string; release: (() => void)[] } }
 
 /** The agent presets Executor Sessions and the main Session are created with, which the bundle's patch defines. */
 export const WORKER_PRESET = 'super-coding-agent-worker', ROUTER_PRESET = 'super-coding-agent-router'
@@ -263,7 +265,7 @@ export class Sessions {
         agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
     } else {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
-      binding.disposers.push(...this.workOnly(agent, ticket!.id))
+      binding.work = { ticketId: ticket!.id, release: this.workOnly(agent, ticket!.id) }
     }
   }
   /**
@@ -307,7 +309,7 @@ export class Sessions {
     }
     const ticketId = parent === undefined ? undefined : ticketOfSession(parent)
     if (ticketId === undefined || !this.host.store.tickets.get(ticketId)) return
-    this.bindings.set(agent, { disposers: this.workOnly(agent, ticketId), subagent: true })
+    this.bindings.set(agent, { disposers: [], work: { ticketId, release: this.workOnly(agent, ticketId) }, subagent: true })
   }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
   private bindSkills(binding: SessionBinding, version: PromptVersion): void {
@@ -339,8 +341,21 @@ export class Sessions {
     if (!binding) return
     this.bindings.delete(agent)
     binding.skills?.dispose()
-    for (const dispose of binding.disposers.splice(0).reverse()) {
+    for (const dispose of [...binding.disposers.splice(0), ...binding.work?.release.splice(0) ?? []].reverse()) {
       try { dispose() } catch (error) { this.ctx.logger.warn('super-coding-agent could not release what it registered for a Session: %s', String(error)) }
+    }
+  }
+  /**
+   * Applies every live worker's tool limits again, so tools the profile gained since a worker was decorated, such as a
+   * subagent provider's delegation tool mounted later, become usable, and tools it lost are left out.
+   */
+  refreshWork(): void {
+    for (const [agent, binding] of this.bindings) {
+      if (!binding.work) continue
+      for (const dispose of binding.work.release.splice(0).reverse()) {
+        try { dispose() } catch (error) { this.ctx.logger.warn('super-coding-agent could not release a worker\'s tool limits: %s', String(error)) }
+      }
+      binding.work.release = this.workOnly(agent, binding.work.ticketId)
     }
   }
   /** Releases prompt sections, skills, and tools registered by `Sessions` across all decorated agents. */

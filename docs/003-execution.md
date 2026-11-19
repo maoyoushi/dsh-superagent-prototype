@@ -30,13 +30,13 @@ The main Session uses `super-coding-agent-router`, with the same 5-second shell 
 
 ### Preparing a Ticket directory
 
-Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` in the execution root. It has ten minutes to finish. The default makes the directory a git worktree of the plan Source's checkout, on a new branch named after the Ticket:
+Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` in the execution root. It has ten minutes to finish. The default makes the directory a git worktree of the plan Source's checkout, on a branch named after the Ticket:
 
 ```sh
-git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"
+git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree prune && { git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add "$SUPER_CODING_AGENT_DIR" "agent/$SUPER_CODING_AGENT_NAME" 2>/dev/null || git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"; }
 ```
 
-The branch starts from the commit the checkout has checked out. With an empty prepare command, the worker starts in an empty directory.
+A new branch starts from the commit the checkout has checked out. When an earlier attempt already created the branch, its worktree is checked out again rather than failing. With an empty prepare command, the worker starts in an empty directory.
 
 A failed command fails the Ticket and records its output. A retry or a new revision of the plan tries preparation again.
 
@@ -95,7 +95,8 @@ The prepare command and Executor instructions receive the same execution variabl
 | `SUPER_CODING_AGENT_DEVELOP_TOOL`, `SUPER_CODING_AGENT_VERIFY_TOOL`, `SUPER_CODING_AGENT_REVIEW_TOOL` | Executor | The tool that takes each step of a subtask: `subagent_claude_code`, `subagent_codex`, or `worker` |
 | `SUPER_CODING_AGENT_SUBTASK_MINUTES` | Executor | Minutes one delegated subtask should finish within |
 | `SUPER_CODING_AGENT_BLOCKED_COMMANDS` | Executor | Commands the Executor may not run |
-| `SUPER_CODING_AGENT_REPOSITORY`, `SUPER_CODING_AGENT_PLAN_DIR` | plan | The checkout and the plan directory, as absolute paths |
+| `SUPER_CODING_AGENT_REPOSITORY` | Executor | The checkout, as an absolute path, also while the plan Source is off |
+| `SUPER_CODING_AGENT_PLAN_DIR` | plan | The plan directory, as an absolute path |
 | `SUPER_CODING_AGENT_PLAN_FILE` | plan | The absolute path of the plan file that started the Ticket |
 
 Ticket-specific values come from its directory and originating Trigger. Other values come from the current settings. Only the panel can change the execution environment and the Subagents settings; text sent to the main Session cannot change the configured shell command.

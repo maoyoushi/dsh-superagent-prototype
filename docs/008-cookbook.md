@@ -152,15 +152,14 @@ A kind without `threadContext` gives assessments no Thread context; the Trigger'
 ```ts
   environment: {
     variables: [
-      { key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '…', en: 'Absolute path of the local git checkout' } },
       { key: 'SUPER_CODING_AGENT_PLAN_DIR', description: { zh: '…', en: 'Absolute path of the plan directory' } },
       { key: 'SUPER_CODING_AGENT_PLAN_FILE', description: { zh: '…', en: 'Absolute path of this ticket\'s plan file; never edit it' } }],
-    values: ({ deployment, trigger }) => ({ SUPER_CODING_AGENT_REPOSITORY: deployment.repository, SUPER_CODING_AGENT_PLAN_DIR: deployment.plan.directory,
+    values: ({ deployment, trigger }) => ({ SUPER_CODING_AGENT_PLAN_DIR: deployment.plan.directory,
       SUPER_CODING_AGENT_PLAN_FILE: typeof trigger?.meta.file === 'string' ? trigger.meta.file : '' }),
   },
 ```
 
-Execution settings show declared `variables` beside the prepare command even when the Source is off. While it is on, `values` supplies the values from the deployment, the configuration and the Ticket's originating Trigger. The default prepare command reads `SUPER_CODING_AGENT_REPOSITORY`; the worker reads `SUPER_CODING_AGENT_PLAN_FILE` to find its plan.
+Execution settings show declared `variables` beside the prepare command even when the Source is off. While it is on, `values` supplies the values from the deployment, the configuration and the Ticket's originating Trigger. The default prepare command reads `SUPER_CODING_AGENT_REPOSITORY`, which the Executor registers from the deployment so it is set even while the Source is off; the worker reads `SUPER_CODING_AGENT_PLAN_FILE` to find its plan.
 
 Use the `SUPER_CODING_AGENT_` prefix, return an empty value when the Trigger does not carry the fact, and never include credentials.
 

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Super Coding Agent",
-    "description": "监听单个 GitHub 仓库，把获授权的请求转为 Ticket，并在各自的 DSH 会话中执行。"
+    "description": "监听本地 git 仓库中的计划目录，把计划文件转为 Ticket，并在各自的 DSH 会话中执行，把有边界的子任务委派给 Claude Code 和 Codex。"
   }
 }

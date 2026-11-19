@@ -108,8 +108,9 @@ describe('Source registry', () => {
   it('finds what a search query names in each kind\'s terms', () => {
     const sources = new SourceRegistry(() => SettingsSchema.parse({}))
     sources.register(chatKind); sources.register(planKind)
-    expect(sources.find('docs/plans/login.md')).toEqual({ threads: ['plan:docs/plans/login.md'], terms: [] })
-    expect(sources.find('./auth/login.md')).toEqual({ threads: ['plan:auth/login.md'], terms: [] })
+    // A path in the repository also names the plan by its path in the plan directory.
+    expect(sources.find('docs/plans/login.md')).toEqual({ threads: ['plan:docs/plans/login.md', 'plan:plans/login.md', 'plan:login.md'], terms: [] })
+    expect(sources.find('./auth/login.md')).toEqual({ threads: ['plan:auth/login.md', 'plan:login.md'], terms: [] })
     expect(sources.find('see om_abc and om_abc, om_def')).toEqual({ threads: [], terms: ['om_abc', 'om_def'] })
     expect(sources.find('login fails')).toEqual({ threads: [], terms: [] })
     expect(chatKind.policy!.unnamed).toEqual({ person: { zh: '聊天用户', en: 'Chat user' }, bot: { zh: '聊天机器人', en: 'Chat bot' } })

@@ -1,6 +1,7 @@
 /** Mounts DSH's Claude Code and Codex subagent providers from the Subagents settings, and checks that their CLIs start. */
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-subprocess'
+import { basename, delimiter, dirname, isAbsolute } from 'node:path'
 import { UserError } from '../core/index.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { runAsWorker } from '../infra/environment.ts'
@@ -11,6 +12,8 @@ const PROBE_TIMEOUT_MS = 15_000
 /** The settings key of each provider. */
 const KEYS: Record<SubagentProvider, 'claudeCode' | 'codex'> = { 'claude-code': 'claudeCode', codex: 'codex' }
 const LABELS: Record<SubagentProvider, string> = { 'claude-code': 'Claude Code', codex: 'Codex' }
+/** The executable each provider starts, which it resolves on PATH: a configured command must name it. */
+export const EXECUTABLES: Record<SubagentProvider, string> = { 'claude-code': 'claude', codex: 'codex' }
 const now = (): string => new Date().toISOString()
 
 /** A Cordis plugin module as the provider packages export it. */
@@ -35,6 +38,8 @@ export interface SubagentsHost {
   readonly cwd: string
   readonly load?: ProviderLoader
   readonly probe?: Probe
+  /** Called after the mounted providers changed, so live workers can take up or drop their delegation tools. */
+  changed?(): void
 }
 
 /** A mounted provider: the command and environment it was mounted with, and its fiber. */
@@ -43,10 +48,13 @@ interface Mount { key: string; fiber: Fiber }
 export interface SubagentStatus { enabled: boolean; mounted: boolean; available: boolean | null; version: string; error: string }
 
 /** The environment a provider's children get: the configured variables, and Claude Code's model as ANTHROPIC_MODEL. */
-export function providerEnv(config: SubagentsConfig, provider: SubagentProvider): Record<string, string> {
-  if (provider === 'codex') return { ...config.codex.env }
-  const { env, model } = config.claudeCode
-  return { ...env, ...model ? { ANTHROPIC_MODEL: model } : {} }
+export function providerEnv(config: SubagentsConfig, provider: SubagentProvider, path = process.env.PATH ?? ''): Record<string, string> {
+  const settings = config[KEYS[provider]]
+  // The provider resolves its executable on PATH, so an absolute command's directory goes first: the binary checked is the one run.
+  const env: Record<string, string> = { ...settings.env }
+  if (isAbsolute(settings.command)) env.PATH = [dirname(settings.command), settings.env.PATH ?? path].filter(Boolean).join(delimiter)
+  if (provider === 'claude-code' && config.claudeCode.model) env.ANTHROPIC_MODEL = config.claudeCode.model
+  return env
 }
 
 /**
@@ -70,8 +78,13 @@ export class Subagents {
   async check(candidate: SubagentsConfig, current: SubagentsConfig): Promise<void> {
     for (const provider of SUBAGENT_PROVIDERS) {
       const next = candidate[KEYS[provider]], before = current[KEYS[provider]]
-      if (!next.enabled || (before.enabled && before.command === next.command)) continue
-      const result = await this.probe(provider, next.command)
+      if (!next.enabled) continue
+      if (basename(next.command) !== EXECUTABLES[provider]) {
+        throw new UserError('subagentUnavailable', { provider: LABELS[provider], error: `the provider starts ${EXECUTABLES[provider]}; the command must be ${EXECUTABLES[provider]} or a path ending in /${EXECUTABLES[provider]}` })
+      }
+      if (before.enabled && before.command === next.command) continue
+      // A refused save leaves the mounted provider as it is, so its check is not recorded as the provider's state.
+      const result = await this.probe(provider, next.command, false)
       if (!result.available) throw new UserError('subagentUnavailable', { provider: LABELS[provider], error: result.error })
     }
   }
@@ -90,6 +103,8 @@ export class Subagents {
         version: checked?.version ?? '', error: checked?.error ?? '' }]
     })) as Record<SubagentProvider, SubagentStatus>
   }
+  /** Reports that the providers wait for setup, which mounts them once it succeeds. */
+  pending(): void { this.host.health.set({ state: 'paused', detail: 'Waiting for the deployment check', at: now() }) }
   /** Unmounts every provider. */
   async dispose(): Promise<void> {
     await this.queue
@@ -100,32 +115,38 @@ export class Subagents {
   private async apply(): Promise<void> {
     const config = this.host.settings().subagents
     const failures: string[] = []
+    let changed = false
     for (const provider of SUBAGENT_PROVIDERS) {
       const settings = config[KEYS[provider]]
       const env = providerEnv(config, provider)
       const key = settings.enabled ? JSON.stringify([settings.command, env]) : ''
       const mounted = this.mounts.get(provider)
+      // A disabled provider keeps no check, so its status does not report a result of when it was on.
+      if (!key) this.checks.delete(provider)
       if (mounted?.key === key || (!mounted && !key)) continue
-      if (mounted) { this.mounts.delete(provider); await mounted.fiber.dispose().catch(() => {}) }
-      if (!key || this.host.lifetime.aborted) continue
+      if (mounted) { this.mounts.delete(provider); changed = true; await mounted.fiber.dispose().catch(() => {}) }
+      if (!key) continue
+      if (this.host.lifetime.aborted) continue
       const checked = await this.probe(provider, settings.command)
       if (!checked.available) { failures.push(`${LABELS[provider]}: ${checked.error}`); continue }
       try {
         const plugin = await (this.host.load ?? loadProvider)(provider)
         const fiber = await (this.host.context.plugin as (plugin: unknown, config: unknown) => PromiseLike<Fiber>)(plugin, { env })
         this.mounts.set(provider, { key, fiber })
+        changed = true
       } catch (error) { failures.push(`${LABELS[provider]}: ${error instanceof Error ? error.message : String(error)}`) }
     }
     this.report(failures)
+    if (changed) this.host.changed?.()
   }
-  private async probe(provider: SubagentProvider, command: string) {
+  private async probe(provider: SubagentProvider, command: string, record = true) {
     const { host } = this
     const signal = AbortSignal.any([host.lifetime, AbortSignal.timeout(PROBE_TIMEOUT_MS)])
     const run = host.probe ?? ((argv: string[], abort: AbortSignal) => runAsWorker(host.context.subprocess, argv, host.cwd, abort))
     const result = await run([command, '--version'], signal)
       .then(output => ({ available: true, version: output.trim().split('\n')[0] ?? '', error: '' }),
         (error: unknown) => ({ available: false, version: '', error: error instanceof Error ? error.message : String(error) }))
-    this.checks.set(provider, result)
+    if (record) this.checks.set(provider, result)
     return result
   }
   private report(failures: string[]): void {

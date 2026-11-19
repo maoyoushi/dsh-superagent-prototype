@@ -205,7 +205,7 @@ export class Settings {
     const changed = blocked.join(' ') !== old.executor.blockedCommands.join(' ')
     if (changed) await this.host.setup.blockCommands(blocked)
     // Mount, remount or unmount the providers a Subagents save changed; a failure is reported on the subagents health entry.
-    if (block === 'subagents') await this.host.subagents.sync()
+    if (block === 'subagents' && this.host.setup.configured()) await this.host.subagents.sync()
     // When restarting, the notice stays pending until after the restart; `setup.restart()` defers until this call returns.
     const delivery = restarting ? 'pending' : await sessions.delivery(`settings:${block}`)
     if (restarting) this.host.setup.restart()

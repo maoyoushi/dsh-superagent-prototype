@@ -11,6 +11,7 @@ export const EXECUTOR_VARIABLES: readonly (VariableSpec & { ticket?: true })[] =
   { key: 'SUPER_CODING_AGENT_DIR', ticket: true, description: { zh: '这个工单的执行目录；执行器 Session 在其中工作', en: 'This ticket\'s directory; the executor Session works in it' } },
   { key: 'SUPER_CODING_AGENT_NAME', ticket: true, description: { zh: '工单的短名，也是执行目录的名字', en: 'The ticket\'s short name, also its directory\'s name' } },
   { key: 'SUPER_CODING_AGENT_TICKET', ticket: true, description: { zh: '工单 id', en: 'The ticket id' } },
+  { key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '本地 git 检出的绝对路径；默认的准备命令从它创建工单的 worktree', en: 'Absolute path of the local git checkout, which the default prepare command makes each Ticket\'s worktree from' } },
   { key: 'SUPER_CODING_AGENT_DEVELOP_TOOL', description: { zh: '开发子任务所用的工具；worker 表示执行器自己做', en: 'The tool that develops a subtask; worker means the Executor does it itself' } },
   { key: 'SUPER_CODING_AGENT_VERIFY_TOOL', description: { zh: '验证子任务所用的工具；worker 表示执行器自己做', en: 'The tool that verifies a subtask against its acceptance checks; worker means the Executor does it itself' } },
   { key: 'SUPER_CODING_AGENT_REVIEW_TOOL', description: { zh: '审查子任务所用的工具；worker 表示执行器自己做', en: 'The tool that reviews a subtask\'s diff; worker means the Executor does it itself' } },
@@ -33,7 +34,8 @@ export function declaredVariables(sources: SourceRegistry, settings?: Settings):
 export function environmentOf(input: { deployment: Deployment; sources: SourceRegistry; settings: Settings; ticket?: { id: string; name: string; directory: string }; trigger?: Trigger }): Variable[] {
   const { deployment, sources, settings, ticket, trigger } = input
   const { roles, maxSubtaskMinutes } = settings.subagents
-  const executor: Record<string, string> = { SUPER_CODING_AGENT_BLOCKED_COMMANDS: settings.executor.blockedCommands.join(' '),
+  const executor: Record<string, string> = { SUPER_CODING_AGENT_REPOSITORY: deployment.repository,
+    SUPER_CODING_AGENT_BLOCKED_COMMANDS: settings.executor.blockedCommands.join(' '),
     SUPER_CODING_AGENT_DEVELOP_TOOL: ROLE_TOOLS[roles.develop], SUPER_CODING_AGENT_VERIFY_TOOL: ROLE_TOOLS[roles.verify],
     SUPER_CODING_AGENT_REVIEW_TOOL: ROLE_TOOLS[roles.review], SUPER_CODING_AGENT_SUBTASK_MINUTES: String(maxSubtaskMinutes), ...ticket ? { SUPER_CODING_AGENT_DIR: ticket.directory, SUPER_CODING_AGENT_NAME: ticket.name, SUPER_CODING_AGENT_TICKET: ticket.id } : {} }
   const result: Variable[] = EXECUTOR_VARIABLES.filter(spec => !spec.ticket || ticket).map(spec => ({ key: spec.key, value: executor[spec.key] ?? '', description: spec.description, owner: 'executor' }))

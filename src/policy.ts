@@ -89,8 +89,11 @@ export const EvalConfigSchema = z.object({
 }).strict()
 const CommandNameSchema = z.string().regex(/^[A-Za-z0-9._-]+$/).refine(name => name !== '.' && name !== '..', 'Not a command name')
   .refine(name => !WORKER_COMMANDS.includes(name), `${WORKER_COMMANDS.join(', ')} cannot be blocked`)
-/** A new Ticket's directory as a git worktree of the plan Source's checkout, on a branch named after the Ticket. */
-export const DEFAULT_PREPARE = 'git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"'
+/**
+ * A new Ticket's directory as a git worktree of the plan Source's checkout, on a branch named after the Ticket: the branch is
+ * reused when an earlier attempt created it, and worktrees whose directories are gone are pruned first.
+ */
+export const DEFAULT_PREPARE = 'git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree prune && { git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add "$SUPER_CODING_AGENT_DIR" "agent/$SUPER_CODING_AGENT_NAME" 2>/dev/null || git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"; }'
 /** Executor settings: worker model, concurrency, ticket directory root (empty defaults to `<stateDir>/work`), `prepare` command, and blocked commands. */
 export const ExecutorConfigSchema = z.object({
   model: RoleModelSchema.nullable().default(null),
