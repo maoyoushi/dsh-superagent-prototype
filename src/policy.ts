@@ -95,6 +95,33 @@ export const ExecutorConfigSchema = z.object({
   prepare: z.string().max(LIMITS.prepareCommand).default(''),
   blockedCommands: z.array(CommandNameSchema).default([]),
 }).strict()
+/** The external coding agents a worker delegates to, by the provider name DSH registers them under. */
+export const SUBAGENT_PROVIDERS = ['claude-code', 'codex'] as const
+export type SubagentProvider = typeof SUBAGENT_PROVIDERS[number]
+/** Who does a step of a delegated subtask: one of the providers, or the worker itself. */
+export const SubagentRoleSchema = z.enum([...SUBAGENT_PROVIDERS, 'worker'])
+export type SubagentRole = z.infer<typeof SubagentRoleSchema>
+const EnvSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'An environment variable name'), z.string().max(LIMITS.subagentEnvValue))
+  .refine(env => Object.keys(env).length <= LIMITS.subagentEnvEntries, `At most ${LIMITS.subagentEnvEntries} variables`)
+/** One provider: whether it is mounted, the CLI its availability check runs, and the environment its child processes get. */
+const SubagentProviderSchema = (command: string) => z.object({
+  enabled: z.boolean().default(false),
+  command: z.string().trim().min(1).regex(/^[^\s'"`$;|&<>]+$/, 'A command name or path').default(command),
+  env: EnvSchema.default({}),
+}).strict()
+/**
+ * Subagent settings: the Claude Code and Codex providers (Claude Code also with a model, passed as ANTHROPIC_MODEL), who
+ * develops, verifies and reviews a delegated subtask, and how long one subtask may take.
+ */
+export const SubagentsConfigSchema = z.object({
+  claudeCode: SubagentProviderSchema('claude').extend({ model: z.string().trim().max(200).default('') }).default(() =>
+    SubagentProviderSchema('claude').extend({ model: z.string().trim().max(200).default('') }).parse({})),
+  codex: SubagentProviderSchema('codex').default(() => SubagentProviderSchema('codex').parse({})),
+  roles: z.object({ develop: SubagentRoleSchema.default('claude-code'), verify: SubagentRoleSchema.default('codex'),
+    review: SubagentRoleSchema.default('codex') }).strict().default({ develop: 'claude-code', verify: 'codex', review: 'codex' }),
+  maxSubtaskMinutes: z.number().int().min(LIMITS.subtaskMinutes.min).max(LIMITS.subtaskMinutes.max).default(20),
+}).strict()
+export type SubagentsConfig = z.infer<typeof SubagentsConfigSchema>
 export const SourceInstanceSchema = z.object({ enabled: z.boolean().default(true), config: z.record(z.string(), z.unknown()).default({}) }).strict()
 export const SettingsSchema = z.object({
   paused: z.boolean().default(false),
@@ -102,9 +129,10 @@ export const SettingsSchema = z.object({
   policy: PolicyConfigSchema.default(() => PolicyConfigSchema.parse({})),
   eval: EvalConfigSchema.default(() => EvalConfigSchema.parse({})),
   executor: ExecutorConfigSchema.default(() => ExecutorConfigSchema.parse({})),
+  subagents: SubagentsConfigSchema.default(() => SubagentsConfigSchema.parse({})),
 }).strict()
 export type Settings = z.infer<typeof SettingsSchema>
-export type SettingsBlock = 'policy' | 'eval' | 'executor' | `source:${string}`
+export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'subagents' | `source:${string}`
 export type SettingsSave = SettingsBlock | 'pause'
 export type SettingsOrigin = 'panel' | 'tool' | 'sync'
 

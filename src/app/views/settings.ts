@@ -5,6 +5,8 @@ import { policyVersion } from '../../policy.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
 import { declaredVariables, executionRoot } from '../execution-environment.ts'
 import type { Store } from '../store.ts'
+import type { SubagentProvider } from '../../policy.ts'
+import type { SubagentStatus } from '../subagents.ts'
 import { problemOf, sourceHealth, type HealthMap, type SetupState } from './sources.ts'
 
 function policyOf(sources: SourceRegistry, id: string, health: HealthMap) {
@@ -20,13 +22,15 @@ function policyOf(sources: SourceRegistry, id: string, health: HealthMap) {
  * Builds the settings view by block (`{ value, revision }`), per-Source configuration and restart-sensitive fields,
  * and execution environment details (`stateDir` provides the default ticket working directory root).
  */
-export function settingsView(store: Store, sources: SourceRegistry, health: HealthMap, setup: SetupState, stateDir: string) {
+export function settingsView(store: Store, sources: SourceRegistry, health: HealthMap, setup: SetupState, stateDir: string,
+  subagents: Record<SubagentProvider, SubagentStatus>) {
   const settings = store.settings()
-  const block = <V>(name: 'policy' | 'eval' | 'executor', value: V) => ({ value, revision: store.blockRevision(name) })
+  const block = <V>(name: 'policy' | 'eval' | 'executor' | 'subagents', value: V) => ({ value, revision: store.blockRevision(name) })
   return {
     policyVersion: policyVersion(settings),
     blocks: { policy: block('policy', settings.policy), eval: block('eval', settings.eval), executor: block('executor',
-      settings.executor) },
+      settings.executor), subagents: block('subagents', settings.subagents) },
+    subagents,
     sources: sources.instances(settings).map(instance => {
       const kind = sources.kind(instance.kind)
       const problem = problemOf(instance.id, setup)

@@ -9,7 +9,8 @@ type SourceSettings = SettingsVersion['settings']['sources'][string]
 export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction' | 'ruleEnabled' | 'ruleDisabled' | 'ruleRemoved'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
-  | 'blockedCommands'
+  | 'blockedCommands' | 'subagentEnabled' | 'subagentDisabled' | 'subagentCommand' | 'subagentEnv' | 'subagentModel' | 'subagentRoles'
+  | 'subagentMinutes'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
@@ -71,6 +72,17 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
   if (before.executor.directory !== after.executor.directory) changes.push({ code: 'executionDirectory', from: before.executor.directory, to: after.executor.directory })
   if (before.executor.prepare !== after.executor.prepare) changes.push({ code: 'prepareCommand' })
   if (!same(before.executor.blockedCommands, after.executor.blockedCommands)) changes.push({ code: 'blockedCommands', from: before.executor.blockedCommands.join(' '), to: after.executor.blockedCommands.join(' ') })
+  for (const [key, name] of [['claudeCode', 'Claude Code'], ['codex', 'Codex']] as const) {
+    const a = before.subagents[key], b = after.subagents[key]
+    if (a.enabled !== b.enabled) changes.push({ code: b.enabled ? 'subagentEnabled' : 'subagentDisabled', name })
+    if (a.command !== b.command) changes.push({ code: 'subagentCommand', name, from: a.command, to: b.command })
+    // Name the variables that changed, never their values, which may be credentials.
+    const names = [...new Set([...Object.keys(a.env), ...Object.keys(b.env)])].filter(item => a.env[item] !== b.env[item])
+    if (names.length) changes.push({ code: 'subagentEnv', name, items: names })
+  }
+  if (before.subagents.claudeCode.model !== after.subagents.claudeCode.model) changes.push({ code: 'subagentModel', from: before.subagents.claudeCode.model, to: after.subagents.claudeCode.model })
+  if (!same(before.subagents.roles, after.subagents.roles)) changes.push({ code: 'subagentRoles' })
+  if (before.subagents.maxSubtaskMinutes !== after.subagents.maxSubtaskMinutes) changes.push({ code: 'subagentMinutes', from: before.subagents.maxSubtaskMinutes, to: after.subagents.maxSubtaskMinutes })
   for (const id of new Set([...Object.keys(before.sources), ...Object.keys(after.sources)])) changes.push(...sourceChanges(id, before.sources[id], after.sources[id], sources))
   return changes
 }

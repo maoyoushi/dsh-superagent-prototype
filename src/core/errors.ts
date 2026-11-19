@@ -43,6 +43,8 @@ export const USER_ERRORS = {
   promptPartEmpty: ['refused', 'The “{part}” part cannot be empty; reset it to follow its built-in text'],
   sourceNotInstalled: ['refused', 'The {source} Source kind is not installed'],
   noLabels: ['refused', 'This Source has no names to refresh'],
+  subagentUnavailable: ['refused', 'The {provider} subagent cannot start: {error}'],
+  panelOnlySubagents: ['refused', 'Subagent settings, which hold the agents\' commands and credentials, can only be changed in the management panel'],
   nothingToSync: ['refused', 'The {source} Source\'s part of the Policy has nothing to sync from, or the Source is off or waiting for setup'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
