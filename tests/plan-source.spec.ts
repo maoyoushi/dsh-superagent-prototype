@@ -134,6 +134,12 @@ it('does not receive a plan again that was unreadable for a while and comes back
   expect(ctx.state.get(KV.plan.file(repository, 'plans/a.md'))).toMatchObject({ hash: key('plan-file', 'A'), revision: 1 })
 })
 
+it('drops a blank pattern row on save instead of refusing the whole block, and still refuses an overlong one', () => {
+  const saved = planKind.schema.parse({ repository, patterns: [{ pattern: 'PLAN.md' }, { pattern: '' }, { pattern: '   ' }, { pattern: 'docs/**/*.md' }] })
+  expect(saved.patterns).toEqual([{ pattern: 'PLAN.md' }, { pattern: 'docs/**/*.md' }])
+  expect(planKind.schema.safeParse({ repository, patterns: [{ pattern: 'x'.repeat(201) }] }).success).toBe(false)
+})
+
 it('finds the plans of common planning tools anywhere in the repository by default, but not other Markdown or skipped directories', async () => {
   expect(planKind.schema.parse({ repository }).patterns).toEqual(DEFAULT_PATTERNS.map(pattern => ({ pattern })))
   const plans = ['PLAN.md', 'docs/superpowers/plans/x.md', 'docs/stories/1.1.story.md', 'specs/001-auth/tasks.md',

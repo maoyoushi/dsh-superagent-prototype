@@ -17,9 +17,14 @@ import { pause } from './poll.ts'
 export const SOURCE = 'plan'
 /** The sender of every plan file: the operator who wrote it, as the plan Source's part of the Policy lists it. */
 export const OPERATOR = 'operator'
+/** Whether a pattern row holds no pattern, only whitespace. */
+const isBlankPattern = (row: unknown): boolean =>
+  typeof row === 'object' && row !== null && 'pattern' in row && typeof row.pattern === 'string' && row.pattern.trim() === ''
 const PlanConfigSchema = z.object({
   repository: z.string().trim().refine(path => path === '' || isAbsolute(path), 'An absolute path').default(''),
-  patterns: z.array(z.object({ pattern: z.string().trim().min(1).max(200) }).strict()).max(50)
+  // A blank row is one the panel added and left empty: it is dropped, not a reason to refuse the whole block.
+  patterns: z.preprocess(rows => Array.isArray(rows) ? rows.filter(row => !isBlankPattern(row)) : rows,
+    z.array(z.object({ pattern: z.string().trim().min(1).max(200) }).strict()).max(50))
     .default(() => DEFAULT_PATTERNS.map(pattern => ({ pattern }))),
   pollSeconds: z.number().int().min(5).max(3600).default(30),
   failuresBeforeError: z.number().int().min(1).max(20).default(3),
