@@ -3,6 +3,7 @@
  * checkout (`repository`, plans in `plans/`) and the test-only `chat` Source (tests/fixtures/chat.ts): allowed person Alice
  * (`ou_alice`), listened chat `oc_team`, and `auto` eval mode. Stop it with `stop()`.
  */
+import type { Subagents } from '../../src/executor/background.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -97,23 +98,31 @@ export function subagentRuntime(agents: Map<string, FakeAgent>) {
     else parent?.steer(ended)
     child.settled.resolve()
   }
+  // An interrupted subagent ends once `release` lets it: at once, or after the gate a test sets with `slow`.
+  let release = async (id: string) => { settle(id) }
   const service = {
     // No provider is registered by the profile in these tests, so Subagents mounts its own.
     getProvider: vi.fn((_name: string) => undefined),
-    waitForChildren: vi.fn(async (parent: { id: string }) => {
-      const live = [...children.values()].filter(child => child.parent === parent.id && child.live)
+    // DSH 0.2.2: join the tree's work, list its subagents, and interrupt one as its ancestor.
+    waitForTreeWork: vi.fn(async (root: { id: string }) => {
+      const live = [...children.values()].filter(child => child.parent === root.id && child.live)
       await Promise.all(live.map(child => child.settled.promise))
       return live.length > 0
     }),
-    listChildren: vi.fn(async (id: string) => [...children].filter(([, child]) => child.parent === id).map(([childId]) => ({ id: childId }))),
-    drainChildren: vi.fn(async (_parent: { id: string }, ids: readonly string[]) => { for (const id of ids) settle(id) }),
+    listDescendants: vi.fn(async (id: string) => [...children].filter(([, child]) => child.parent === id)
+      .map(([childId, child]) => ({ kind: 'child' as const, id: childId, parentId: id, depth: 1, activity: child.live ? 'running' as const : 'inactive' as const }))),
+    interrupt: vi.fn((id: string, _authority: { kind: 'ancestor'; agent: unknown }) => { void release(id) }),
     drainDescendants: vi.fn(async (parents: readonly { id: string }[]) => {
       for (const parent of parents) {
         closed.add(parent.id)
         for (const [id, child] of children) if (child.parent === parent.id) settle(id, false)
       }
     }),
-    interrupt: vi.fn((id: string) => { settle(id) }),
+  } satisfies Subagents & Record<string, unknown>
+  /** The next interrupted subagent ends only once `gate` resolves, as a slow release does. */
+  const slow = (gate: Promise<unknown>) => {
+    const before = release
+    release = async id => { release = before; await gate; settle(id) }
   }
   const spawn = (parent: string) => {
     if (closed.has(parent)) throw new Error('DRAINING: the Session admits no new subagents')
@@ -122,7 +131,7 @@ export function subagentRuntime(agents: Map<string, FakeAgent>) {
     agents.set(id, { id, status: 'running', session: { header: { parentSession: parent } } } as never)
     return id
   }
-  return { service, settle, spawn, live: (id: string) => !!children.get(id)?.live }
+  return { service, settle, spawn, slow, live: (id: string) => !!children.get(id)?.live }
 }
 
 /** @param seed - writes to the database before the Runtime opens it, such as records an earlier version stored. */

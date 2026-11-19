@@ -2,15 +2,16 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { expect, it, vi } from 'vitest'
-import { stopSubagents, untilQuiet } from '../src/executor/background.ts'
+import { stopSubagents, untilQuiet, type Subagents } from '../src/executor/background.ts'
 import { jobRegistry } from './fixtures/host.ts'
 
 /** A context with DSH's job registry and subagents, and an idle worker agent with one live subagent, `child-1`. */
-function setup(waitForChildren: (agent: Agent) => Promise<boolean>, drainChildren: () => Promise<void> = async () => {}) {
+function setup(waitForTreeWork: (agent: Agent) => Promise<boolean>) {
   const jobs = jobRegistry()
   const agent = { id: 'worker-t1', status: 'idle', whenIdle: async () => {}, inbox: { nextTurn: [], nextStep: [] }, cancel: vi.fn() } as unknown as
     Agent & { status: string; cancel: ReturnType<typeof vi.fn> }
-  const subagents = { waitForChildren: vi.fn(waitForChildren), listChildren: async () => [{ id: 'child-1' }], drainChildren: vi.fn(drainChildren) }
+  const subagents = { waitForTreeWork: vi.fn(waitForTreeWork), interrupt: vi.fn(),
+    listDescendants: async () => [{ kind: 'child' as const, id: 'child-1', depth: 1, activity: 'running' as const }] } satisfies Subagents
   const services: Record<string, unknown> = { jobs: jobs.service, subagents }
   const ctx = { get: (name: string) => services[name], agents: { get: () => agent } } as unknown as Context
   return { ctx, agent, jobs, subagents }
@@ -59,11 +60,12 @@ it('joins a worker\'s subagents once for the looks that wait on them, as DSH can
     stop.abort()
     expect(await quiet).toBe(false)
   }
-  expect(subagents.waitForChildren).toHaveBeenCalledTimes(1)
+  expect(subagents.waitForTreeWork).toHaveBeenCalledTimes(1)
 })
 
 it('gives up a release of subagents that does not end within 10 seconds, and cancels the turn their ends woke', async () => {
-  const { ctx, agent } = setup(async () => false, () => new Promise(() => {}))
+  // The interrupted subagent never ends, so the join of the tree's work never returns.
+  const { ctx, agent } = setup(() => new Promise(() => {}))
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   try {
     let stopped = false
