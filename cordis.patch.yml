@@ -4,15 +4,9 @@
 - insert:
     - id: dsh-superagent
       name: dsh-superagent
-    - id: dsh-superagent-github
-      name: dsh-superagent/github-watch
-    # Plan files written in the repository's plan directory; the profile names the repository on the Source.
+    # Plan files written in the repository's plan directory, the only Source; the panel names the repository on the Source.
     - id: dsh-superagent-plan
       name: dsh-superagent/plan-watch
-    # Optional Feishu Source; requires configuring a bot CLI after enabling.
-    - id: dsh-superagent-feishu
-      name: dsh-superagent/feishu-watch
-      disabled: true
     # The agent preset of every Executor Session (WORKER_PRESET in src/app/sessions.ts); the main Session has its own, below.
     # It is DSH's `standard` preset with only what a worker needs, and a shell whose foreground command moves to a background job
     # after 5 seconds, so a long command does not hold back a person's message, which the Session takes at its next step. Left

@@ -1,16 +1,12 @@
-import { expect, it, vi } from 'vitest'
+import { expect, it } from 'vitest'
+import { z } from 'zod'
 import { admissionContext, threadWindow } from '../src/sources/admission-context.ts'
-import { Commands } from '../src/infra/commands.ts'
-import { feishuKind } from '../src/sources/feishu.ts'
-import type { ContextMessage } from '../src/sources/kind.ts'
+import type { Commands } from '../src/infra/commands.ts'
+import type { ContextMessage, ContextPart, SourceKind } from '../src/sources/kind.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 import { SettingsSchema } from '../src/policy.ts'
-import { testDeployment } from './fixtures/deployment.ts'
 import type { Trigger } from '../src/core/index.ts'
 const message = (index: number): ContextMessage => ({ id: `om_${index}`, from: 'ou_user', at: String(index), text: `Message ${index}` })
-/** The same message as a Feishu topic page lists it. */
-const listed = (index: number) => ({ message_id: `om_${index}`, chat_id: 'oc_chat', content: `Message ${index}`, msg_type: 'text',
-  sender: { id: 'ou_user', sender_type: 'user' }, create_time: String(index) })
 it('returns the thread opening and trigger neighbors with exact internal and trailing gaps', () => {
   const result = threadWindow(Array.from({ length: 40 }, (_, i) => message(i)), 'om_25')
   expect(result.entries.map((item: { position: number }) => item.position)).toEqual([1, 2, 3, 4, 5, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
@@ -23,31 +19,39 @@ it('deduplicates overlapping windows and reports an absent source without invent
   expect(threadWindow(messages, 'om_3').entries.map((item: { position: number }) => item.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
   expect(threadWindow(messages, 'om_absent')).toMatchObject({ source_found: false, loaded_messages: 12, omitted_after: 7 })
 })
-it('retains pagination limits and exact loaded counts rather than claiming complete history', async () => {
-  const commands = new Commands(() => testDeployment(), {}, new AbortController().signal)
-  const lark = vi.spyOn(commands, 'lark').mockResolvedValueOnce({ items: [{ message_id: 'om_9', chat_id: 'oc_chat', thread_id: 'omt_thread' }] })
-    .mockResolvedValueOnce({ thread_id: 'omt_thread', messages: [listed(0), listed(1)], has_more: true, page_token: 'next' })
-  const trigger: Trigger = { id: 'event', source: 'feishu', threads: [{ source: 'feishu', id: 'oc_chat:om_9' }], actor: { source: 'feishu', id: 'ou_user' }, human: true, text: 'Trigger', at: '', meta: { chatId: 'oc_chat', messageId: 'om_9', direct: false, mentioned: false } }
-  const sources = new SourceRegistry(() => SettingsSchema.parse({ sources: { feishu: { enabled: true, config: { readPageSize: 2 } } } }))
-  sources.register(feishuKind)
-  const result = await admissionContext(sources.threadContext(trigger)!, commands, 1)
-  expect(result).toMatchObject({ complete: false, next: 'next', window: { loaded_messages: 2, source_found: false } })
-  expect(lark).toHaveBeenCalledTimes(2)
-  expect(lark.mock.calls[1]![0]).toEqual(expect.arrayContaining(['--page-size', '2']))
-})
-it('gives a message outside a topic the five chat messages before it, and says it read the chat', async () => {
-  const commands = new Commands(() => testDeployment(), {}, new AbortController().signal)
-  const at = Date.parse('2026-09-11T12:00:00Z')
-  const item = (n: number) => ({ message_id: `om_${n}`, chat_id: 'oc_chat', create_time: String(at + n * 1000), sender: { id: 'ou_user', sender_type: 'user' },
-    body: { content: JSON.stringify({ text: `message ${n}` }) } })
-  const lark = vi.spyOn(commands, 'lark').mockResolvedValueOnce({ items: [{ message_id: 'om_0', chat_id: 'oc_chat' }] })
-    .mockResolvedValueOnce({ items: [0, -1, -2, -3, -4, -5].map(item), has_more: true, page_token: 'older' })
-  const trigger: Trigger = { id: 'event', source: 'feishu', threads: [{ source: 'feishu', id: 'oc_chat:om_0' }], actor: { source: 'feishu', id: 'ou_user' },
-    human: true, text: 'message 0', at: new Date(at).toISOString(), meta: { chatId: 'oc_chat', messageId: 'om_0', direct: false, mentioned: false } }
+/** A Source whose Thread reads return the pages given, each named by the cursor that reads it (`first` for the first page). */
+function paged(pages: Record<string, ContextPart>) {
+  const reads: (string | undefined)[] = []
+  const kind: SourceKind<Record<string, never>> = { kind: 'probe', title: { zh: '探针', en: 'Probe' }, description: { zh: '', en: '' }, health: [],
+    schema: z.object({}).strict(), fields: [],
+    threadContext: { messageId: trigger => String(trigger.meta.messageId), read: async (_commands, _trigger, _part, cursor) => {
+      reads.push(cursor)
+      return pages[cursor ?? 'first']!
+    } } }
   const sources = new SourceRegistry(() => SettingsSchema.parse({}))
-  sources.register(feishuKind)
-  const result = await admissionContext(sources.threadContext(trigger)!, commands, 3)
-  expect(result).toMatchObject({ status: 'chat_neighbours', complete: true, window: { source_found: true, loaded_messages: 6 } })
-  expect(result.messages.map(message => message.id)).toEqual([-5, -4, -3, -2, -1, 0].map(n => `om_${n}`))
-  expect(lark).toHaveBeenCalledTimes(2)
+  sources.register(kind)
+  const trigger: Trigger = { id: 'event', source: 'probe', threads: [{ source: 'probe', id: 'room:om_9' }], actor: { source: 'probe', id: 'ou_user' },
+    human: true, text: 'Trigger', at: '', meta: { messageId: 'om_9' } }
+  return { context: sources.threadContext(trigger)!, reads }
+}
+const commands = {} as Commands
+it('retains pagination limits and exact loaded counts rather than claiming complete history', async () => {
+  const { context, reads } = paged({ first: { messages: [message(0), message(1)], next: 'next', body: {} },
+    next: { messages: [message(2)], body: {} } })
+  const result = await admissionContext(context, commands, 1)
+  expect(result).toMatchObject({ complete: false, next: 'next', window: { loaded_messages: 2, source_found: false } })
+  expect(reads).toEqual([undefined])
+  // With pages enough, it reads to the end; a message a later page repeats counts once.
+  const all = paged({ first: { messages: [message(0), message(1)], next: 'next', body: {} }, next: { messages: [message(1), message(9)], body: {} } })
+  expect(await admissionContext(all.context, commands, 5)).toMatchObject({ complete: true, next: null,
+    window: { loaded_messages: 3, source_found: true } })
+  expect(all.reads).toEqual([undefined, 'next'])
+})
+it('says how the Source read the Thread, such as the chat around a message outside a topic, and refuses a cursor that repeats', async () => {
+  const { context } = paged({ first: { messages: [-2, -1, 9].map(message), status: 'chat_neighbours', body: {} } })
+  const result = await admissionContext(context, commands, 3)
+  expect(result).toMatchObject({ status: 'chat_neighbours', complete: true, window: { source_found: true, loaded_messages: 3 } })
+  expect(result.messages.map(item => item.id)).toEqual(['om_-2', 'om_-1', 'om_9'])
+  const looping = paged({ first: { messages: [message(0)], next: 'again', body: {} }, again: { messages: [message(1)], next: 'again', body: {} } })
+  await expect(admissionContext(looping.context, commands, 5)).rejects.toThrow('Thread pagination repeated a cursor')
 })

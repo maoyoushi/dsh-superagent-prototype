@@ -13,9 +13,9 @@ import { packagePath } from '../src/infra/paths.ts'
 import type { Variable } from '../src/app/execution-environment.ts'
 
 /** The execution environment outside any ticket, as the runtime passes it once setup has finished. */
-const variables = (): Variable[] => [{ key: 'DSH_SUPERAGENT_GITHUB_REPOSITORY', value: 'acme/widgets', description: { zh: '仓库', en: 'The repository' }, owner: 'github' }]
-const ENVIRONMENT_LINE = '- DSH_SUPERAGENT_GITHUB_REPOSITORY = "acme/widgets": The repository.'
-const promptsOf = (store: Store, maxChars = 100000) => new Prompts(store, () => maxChars, variables, () => true)
+const variables = (): Variable[] => [{ key: 'DSH_SUPERAGENT_REPOSITORY', value: '/srv/widgets', description: { zh: '仓库', en: 'The repository' }, owner: 'plan' }]
+const ENVIRONMENT_LINE = '- DSH_SUPERAGENT_REPOSITORY = "/srv/widgets": The repository.'
+const promptsOf = (store: Store, maxChars = 100000) => new Prompts(store, () => maxChars, variables)
 function withStore(body: (store: Store, dir: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'prompts-')); const store = new Store(join(dir, 'db'))
   try { body(store, dir) } finally { store.close(); rmSync(dir, { recursive: true, force: true }) }
@@ -90,12 +90,11 @@ it.each(['orchestrator', 'worker'] as const)('ends the %s prompt with the fixed 
   })
 })
 
-it('rejects unknown keys, built-in skill names and oversized configuration before persisting', () => {
+it('rejects unknown keys, invalid skill names and oversized configuration before persisting', () => {
   withStore(store => {
     const prompts = promptsOf(store)
     expect(() => prompts.save({ ...defaultPrompts(), shared: 'x' }, 0, 'panel')).toThrow()
     expect(() => prompts.save({ communication: '', scope: '' }, 0, 'panel')).toThrow()
-    for (const name of ['github', 'feishu']) expect(() => prompts.save({ ...defaultPrompts(), skills: { [name]: 'mine' } }, 0, 'panel')).toThrow('built-in skill')
     expect(() => prompts.save({ ...defaultPrompts(), skills: { 'Bad Name': 'x' } }, 0, 'panel')).toThrow()
     expect(() => promptsOf(store, 1000).save(defaultPrompts(), 0, 'panel')).toThrow('exceeds')
     expect(prompts.current().revision).toBe(0)
@@ -108,18 +107,15 @@ it('lists a ticket\'s execution environment in its prompt, and says setup is inc
     expect(promptsOf(store).compose(defaultPrompts(), 'worker', ticket).endsWith('- DSH_SUPERAGENT_DIR = "/srv/work/fix-1": This ticket\'s directory.')).toBe(true)
     expect(promptParts(defaultPrompts(), 'worker', 'env').at(-1)).toEqual({ name: 'runtime/environment', kind: 'generated', key: 'runtime/environment',
       text: 'env' })
-    expect(new Prompts(store, () => 100000, () => undefined, () => false).compose(defaultPrompts(), 'worker')).toContain('dsh-superagent is waiting for setup')
+    expect(new Prompts(store, () => 100000, () => undefined).compose(defaultPrompts(), 'worker')).toContain('dsh-superagent is waiting for setup')
   })
 })
 
-it('registers the built-in Source skills, Feishu only with a Feishu bot, before the team skills', () => {
+it('registers the team skills, and no built-in skill', () => {
   withStore(store => {
-    const config = { ...defaultPrompts(), skills: { release: 'Tag releases.' } }
-    const skills = promptsOf(store).skills(config)
-    expect(skills.map(([name]) => name)).toEqual(['feishu', 'github', 'release'])
-    expect(skills[1]![1]).toContain('## CLI usage')
-    expect(skills[2]![1]).toBe('Tag releases.')
-    expect(new Prompts(store, () => 100000, variables, () => false).skills(config).map(([name]) => name)).toEqual(['github', 'release'])
+    const config = { ...defaultPrompts(), skills: { release: 'Tag releases.', review: 'Review the diff.' } }
+    expect(promptsOf(store).skills(config)).toEqual([['release', 'Tag releases.'], ['review', 'Review the diff.']])
+    expect(promptsOf(store).skills(defaultPrompts())).toEqual([])
   })
 })
 
@@ -127,18 +123,17 @@ it('registers the built-in Source skills, Feishu only with a Feishu bot, before 
 describe('overrides of built-in parts', () => {
   const settings = () => SettingsSchema.parse({})
   const config = (overrides: PromptConfig['overrides']) => ({ ...defaultPrompts(), overrides })
-  it('compose in place of the built-in texts, for the roles that read each, the handoff per role and the Source skills', () => {
+  it('compose in place of the built-in texts, for the roles that read each, and the handoff per role', () => {
     withStore(store => {
       const prompts = promptsOf(store)
       const edited = prompts.validate(config({ 'runtime/shared': { text: 'Shared, the team way.' }, 'runtime/dispatch': { text: '## dispatch\nRoute well.' },
-        'runtime/handoff/worker': { text: 'Hand off as a worker.' }, 'skill/github': { text: 'GitHub, the team way.' } }))
+        'runtime/handoff/worker': { text: 'Hand off as a worker.' } }))
       const main = prompts.compose(edited, 'orchestrator'), worker = prompts.compose(edited, 'worker')
       for (const prompt of [main, worker]) expect(prompt.startsWith('Shared, the team way.\n\n')).toBe(true)
       expect(main).toContain('## dispatch\nRoute well.')
       expect(main).not.toContain(guides.dispatch)
       expect(worker).toContain('Hand off as a worker.')
       expect(main).toContain(handoffPolicy('orchestrator'))
-      expect(prompts.skills(edited)).toContainEqual(['github', 'GitHub, the team way.'])
       // The parts say what they are edited by.
       expect(promptParts(edited, 'worker').find(part => part.name === 'runtime/handoff')).toMatchObject({ key: 'runtime/handoff/worker',
         text: 'Hand off as a worker.' })

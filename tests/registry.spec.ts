@@ -1,17 +1,15 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { SettingsSchema } from '../src/policy.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 import type { SourceKind } from '../src/sources/kind.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { OutboundMessage } from '../src/core/index.ts'
-import { Commands } from '../src/infra/commands.ts'
+import type { Commands } from '../src/infra/commands.ts'
 import { HealthBoard } from '../src/infra/health.ts'
 import { sourceContextOf, type SourceContextDeps } from '../src/app/source-context.ts'
-import { feishuChannel, feishuTrigger, feishuTriggerId } from '../src/sources/feishu-trigger.ts'
-import { testDeployment } from './fixtures/deployment.ts'
-import { feishuKind } from '../src/sources/feishu.ts'
-import { githubKind } from '../src/sources/github.ts'
+import { planKind } from '../src/sources/plan.ts'
+import { chatChannel, chatKind, chatTrigger, chatTriggerId } from './fixtures/chat.ts'
 
 const probe: SourceKind<{ interval: number }> = {
   kind: 'probe', title: { zh: '探针', en: 'Probe' }, description: { zh: '', en: '' }, health: [],
@@ -23,10 +21,10 @@ describe('Source registry', () => {
   it('lists every installed kind with defaults, in id order, followed by stored instances whose kind is not installed', () => {
     const settings = SettingsSchema.parse({ sources: { probe: { enabled: false, config: { interval: 9 } }, retired: { enabled: true, config: { x: 1 } } } })
     const sources = new SourceRegistry(() => settings)
-    sources.register(probe); sources.register(githubKind)
+    sources.register(probe); sources.register(planKind)
     expect(sources.instances()).toEqual([
-      { id: 'github', kind: 'github', enabled: true, config: { repository: '', cli: '', pollSeconds: 60, failuresBeforeError: 3,
-        observeIssues: false, observePulls: false, observeComments: false, observeCi: false }, installed: true },
+      { id: 'plan', kind: 'plan', enabled: true, config: { repository: '', directory: 'docs/plans', pollSeconds: 30, failuresBeforeError: 3,
+        includeExisting: false }, installed: true },
       { id: 'probe', kind: 'probe', enabled: false, config: { interval: 9 }, installed: true },
       { id: 'retired', kind: 'retired', enabled: true, config: { x: 1 }, installed: false },
     ])
@@ -78,43 +76,43 @@ describe('Source registry', () => {
     // Pre-claim built-in health entries; sync:* entries are reserved for settings sync.
     for (const name of ['runtime', 'reply']) board.claim(name)
     const sources = new SourceRegistry(() => SettingsSchema.parse({}), board)
-    const unregister = sources.register(githubKind)
-    expect(() => sources.register({ ...probe, health: ['github'] })).toThrow('declares the health entry github')
-    for (const name of ['runtime', 'reply', 'sync:github']) expect(() => sources.register({ ...probe, health: ['probe', name] })).toThrow(name)
+    const unregister = sources.register(planKind)
+    expect(() => sources.register({ ...probe, health: ['plan'] })).toThrow('declares the health entry plan')
+    for (const name of ['runtime', 'reply', 'sync:plan']) expect(() => sources.register({ ...probe, health: ['probe', name] })).toThrow(name)
     expect(sources.kind('probe')).toBeUndefined()
     sources.register({ ...probe, health: ['probe'] })
     const context = (kind: { kind: string; health: readonly string[] }) => sourceContextOf({ sources } as unknown as SourceContextDeps, kind)
-    const first = context(githubKind)
-    first.report('github', { state: 'ready', detail: 'ok' })
-    expect(board.all.github).toEqual({ state: 'ready', detail: 'ok' })
+    const first = context(planKind)
+    first.report('plan', { state: 'ready', detail: 'ok' })
+    expect(board.all.plan).toEqual({ state: 'ready', detail: 'ok' })
     expect(() => first.report('probe', { state: 'ready', detail: '' })).toThrow('has no health entry probe')
     // A report sent after its kind unregisters (such as from an exiting CLI listener) is ignored and does not affect a later registration.
     unregister()
-    expect(() => first.report('github', { state: 'error', detail: 'WARN exiting' })).not.toThrow()
-    expect(board.all.github).toBeUndefined()
-    sources.register(githubKind)
-    first.report('github', { state: 'error', detail: 'late' })
-    expect(board.all.github).toEqual({ state: 'starting', detail: '' })
-    context(githubKind).report('github', { state: 'ready', detail: 'again' })
-    expect(board.all.github).toEqual({ state: 'ready', detail: 'again' })
+    expect(() => first.report('plan', { state: 'error', detail: 'WARN exiting' })).not.toThrow()
+    expect(board.all.plan).toBeUndefined()
+    sources.register(planKind)
+    first.report('plan', { state: 'error', detail: 'late' })
+    expect(board.all.plan).toEqual({ state: 'starting', detail: '' })
+    context(planKind).report('plan', { state: 'ready', detail: 'again' })
+    expect(board.all.plan).toEqual({ state: 'ready', detail: 'again' })
   })
   it('names the Trigger whose message a Trigger\'s message answers, where its kind can', () => {
     const sources = new SourceRegistry(() => SettingsSchema.parse({}))
-    sources.register(feishuKind); sources.register(githubKind)
-    const reply = feishuTrigger({ message_id: 'om_2', chat_id: 'oc_1', chat_type: 'group', sender_id: 'ou_alice', sender_type: 'user',
-      content: 'yes', create_time: '1757376000000', parent_id: 'om_1' }, 'ou_bot', 'cli_bot')!
-    expect(sources.repliesTo(reply)).toBe(feishuTriggerId('om_1'))
+    sources.register(chatKind); sources.register(planKind)
+    const reply = chatTrigger({ message_id: 'om_2', chat_id: 'oc_1', chat_type: 'group', sender_id: 'ou_alice', sender_type: 'user',
+      content: 'yes', create_time: '1757376000000', parent_id: 'om_1' })!
+    expect(sources.repliesTo(reply)).toBe(chatTriggerId('om_1'))
     expect(sources.repliesTo({ ...reply, meta: { ...reply.meta, parentId: undefined } })).toBeUndefined()
-    expect(sources.repliesTo({ ...reply, source: 'github' })).toBeUndefined()
+    expect(sources.repliesTo({ ...reply, source: 'plan' })).toBeUndefined()
   })
   it('finds what a search query names in each kind\'s terms', () => {
     const sources = new SourceRegistry(() => SettingsSchema.parse({}))
-    sources.register(feishuKind); sources.register(githubKind)
-    expect(sources.find('#12')).toEqual({ threads: ['github:12'], terms: [] })
-    expect(sources.find('https://github.com/acme/widgets/pull/7#issuecomment-3')).toEqual({ threads: ['github:7'], terms: [] })
+    sources.register(chatKind); sources.register(planKind)
+    expect(sources.find('docs/plans/login.md')).toEqual({ threads: ['plan:docs/plans/login.md'], terms: [] })
+    expect(sources.find('./auth/login.md')).toEqual({ threads: ['plan:auth/login.md'], terms: [] })
     expect(sources.find('see om_abc and om_abc, om_def')).toEqual({ threads: [], terms: ['om_abc', 'om_def'] })
     expect(sources.find('login fails')).toEqual({ threads: [], terms: [] })
-    expect(feishuKind.policy!.unnamed).toEqual({ person: { zh: '飞书用户', en: 'Feishu user' }, bot: { zh: '飞书机器人', en: 'Feishu bot' } })
+    expect(chatKind.policy!.unnamed).toEqual({ person: { zh: '聊天用户', en: 'Chat user' }, bot: { zh: '聊天机器人', en: 'Chat bot' } })
   })
   it('refuses a second registration of one kind and forgets a kind after its disposer runs', () => {
     const sources = new SourceRegistry(() => SettingsSchema.parse({}))
@@ -124,39 +122,39 @@ describe('Source registry', () => {
     expect(sources.instance('probe')).toBeUndefined()
   })
   it('validates each Source\'s part of the Policy with its kind, keeping parts of kinds that are not installed as stored', () => {
-    const sources = new SourceRegistry(() => SettingsSchema.parse({ policy: { sources: { feishu: { allowed: [{ id: 'ou_alice' }] } } } }))
-    sources.register(feishuKind); sources.register(githubKind)
-    expect(sources.validatePolicy({ feishu: { allowed: [{ id: 'ou_alice', name: 'Alice' }] }, retired: { allowed: [], x: 1 } }))
-      .toEqual({ feishu: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: '', admission: {} }, retired: { allowed: [], x: 1 } })
-    expect(() => sources.validatePolicy({ feishu: { allowed: [{ id: 'alice' }] } })).toThrow()
-    expect(sources.policyPart('feishu')).toEqual({ allowed: [{ id: 'ou_alice' }], syncChat: '', admission: {} })
-    expect(sources.policyPart('github')).toEqual({ allowed: [], admission: {} })
+    const sources = new SourceRegistry(() => SettingsSchema.parse({ policy: { sources: { chat: { allowed: [{ id: 'ou_alice' }] } } } }))
+    sources.register(chatKind); sources.register(planKind)
+    expect(sources.validatePolicy({ chat: { allowed: [{ id: 'ou_alice', name: 'Alice' }] }, retired: { allowed: [], x: 1 } }))
+      .toEqual({ chat: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: '', admission: {} }, retired: { allowed: [], x: 1 } })
+    expect(() => sources.validatePolicy({ chat: { allowed: [{ id: 'alice' }] } })).toThrow()
+    expect(sources.policyPart('chat')).toEqual({ allowed: [{ id: 'ou_alice' }], syncChat: '', admission: {} })
+    // A part the stored Policy does not name reads as its kind's default: the plan Source's operator is allowed.
+    expect(sources.policyPart('plan')).toEqual({ allowed: [{ id: 'operator', name: 'Operator' }], admission: {} })
     sources.register(probe)
     expect(sources.policyPart('probe')).toBeUndefined()
   })
   it('allows a reply only on a Channel whose Source still listens to its chat', () => {
-    const settings = SettingsSchema.parse({ sources: { feishu: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }], directMessages: false } } } })
+    const settings = SettingsSchema.parse({ sources: { chat: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }], directMessages: false } } } })
     const sources = new SourceRegistry(() => settings)
-    expect(sources.channelAllowed({ source: 'feishu', address: { chatId: 'oc_team' } })).toBe(false)
-    sources.register(feishuKind); sources.register(githubKind)
-    expect(sources.channelAllowed({ source: 'feishu', address: { chatId: 'oc_team' } })).toBe(true)
-    expect(sources.channelAllowed({ source: 'feishu', address: { chatId: 'oc_other' } })).toBe(false)
+    expect(sources.channelAllowed({ source: 'chat', address: { chatId: 'oc_team' } })).toBe(false)
+    sources.register(chatKind); sources.register(planKind)
+    expect(sources.channelAllowed({ source: 'chat', address: { chatId: 'oc_team' } })).toBe(true)
+    expect(sources.channelAllowed({ source: 'chat', address: { chatId: 'oc_other' } })).toBe(false)
     // A direct chat's id starts with oc_ too; the address says it is direct, and with direct messages off it gets no reply.
-    expect(sources.channelAllowed(feishuChannel('oc_dm', 'om_1', true))).toBe(false)
-    expect(sources.channelAllowed({ source: 'github', address: { number: '7' } })).toBe(true)
+    expect(sources.channelAllowed({ source: 'chat', address: { chatId: 'oc_dm', messageId: 'om_1', direct: 'true' } })).toBe(false)
+    expect(sources.channelAllowed({ source: 'plan', address: { path: 'a.md' } })).toBe(true)
   })
   it('delivers a reply to a direct message under the default settings', async () => {
     const sources = new SourceRegistry(() => SettingsSchema.parse({}))
-    sources.register(feishuKind)
-    const trigger = feishuTrigger({ message_id: 'om_dm', chat_id: 'oc_dm', chat_type: 'p2p', sender_id: 'ou_alice', sender_type: 'user',
-      content: 'fix it', create_time: '1757376000000' }, 'ou_bot', 'cli_bot')!
+    sources.register(chatKind)
+    const trigger = chatTrigger({ message_id: 'om_dm', chat_id: 'oc_dm', chat_type: 'p2p', sender_id: 'ou_alice', sender_type: 'user',
+      content: 'fix it', create_time: '1757376000000' })!
     const channel = trigger.channel!
     expect(channel.address).toEqual({ chatId: 'oc_dm', messageId: 'om_dm', direct: 'true' })
     expect(sources.channelAllowed(channel)).toBe(true)
-    const commands = new Commands(() => testDeployment(), {}, new AbortController().signal)
-    const run = vi.spyOn(commands, 'run').mockResolvedValue('{"ok":true,"data":{}}')
+    chatChannel.reset()
     const reply: OutboundMessage = { id: 'reply-1', channel, text: 'Done', kind: 'reply' }
-    expect(await sources.send(reply, commands)).toBe('sent')
-    expect(run.mock.calls[0]![1]).toEqual(expect.arrayContaining(['+messages-reply', '--message-id', 'om_dm']))
+    expect(await sources.send(reply, {} as Commands)).toBe('sent')
+    expect(chatChannel.sent).toEqual([reply])
   })
 })

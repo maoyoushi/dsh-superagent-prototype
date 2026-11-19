@@ -15,22 +15,20 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
 import { SETUP_FIELDS } from '../../src/deployment.ts'
 import { EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema, SubagentsConfigSchema } from '../../src/policy.ts'
 import { SetupError, type SetupCode } from '../../src/setup.ts'
-import { feishuChannel } from '../../src/sources/feishu-trigger.ts'
-import { githubChannel } from '../../src/sources/github-trigger.ts'
-import { feishuKind } from '../../src/sources/feishu.ts'
-import { githubKind } from '../../src/sources/github.ts'
+import { planKind, OPERATOR } from '../../src/sources/plan.ts'
 import type { Health } from '../../src/sources/host.ts'
-import type { SourceKind } from '../../src/sources/kind.ts'
+import type { Localized, SourceKind } from '../../src/sources/kind.ts'
 import { testDeployment } from './deployment.ts'
+import { chatKind } from './chat.ts'
 
 export const MEMBER = 'ou_alice'
-const ALLOWED: Record<string, { id: string; name?: string }[]> = { feishu: [{ id: MEMBER, name: 'Alice' }], github: [{ id: 'alice' }] }
+const ALLOWED: Record<string, { id: string; name?: string }[]> = { chat: [{ id: MEMBER, name: 'Alice' }], plan: [{ id: OPERATOR }] }
 type Actor = TriggerRow['actor']
 /** Resolve an actor display label using the fixture policy's allowed list or the source kind's unnamed fallback. */
 export function actor(source: string, id: string, human = true): Actor {
   if (!id) return { source, id }
   const entry = ALLOWED[source]?.find(item => item.id.toLowerCase() === id.toLowerCase())
-  const unnamed = source === 'feishu' ? feishuKind.policy?.unnamed : undefined
+  const unnamed = source === 'chat' ? chatKind.policy?.unnamed : undefined
   const name = entry ? entry.name || entry.id : unnamed ? undefined : id
   return { source, id, name: name ? { zh: name, en: name } : human ? unnamed!.person : unnamed!.bot }
 }
@@ -39,21 +37,21 @@ const TICKET = {
   id: 't1', title: '修复回归', state: 'open', actions: { retry: false, stop: true }, strength: 'explicit', ended: undefined,
   attention: undefined, assignments: 1, inputs: 2, undelivered: 0, deliveryError: undefined, sessionId: 'worker-t1', directory: '/w/t1',
   summary: 'working on it', createdAt: '2026-09-22T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z',
-  threads: [{ key: 'github:42', source: 'github', title: '#42 Fix login', url: 'https://github.com/acme/widgets/pull/42',
-    facts: { number: { value: '#42' }, ci: { label: { zh: 'CI 失败', en: 'CI failed' }, value: '1', problem: true } } }],
+  threads: [{ key: 'plan:login.md', source: 'plan', title: 'login.md', url: 'file:///repo/docs/plans/login.md',
+    facts: { items: { value: '3 项' }, checks: { label: { zh: '检查失败', en: 'Checks failed' }, value: '1', problem: true } } }],
 } satisfies TicketFields
 export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketStage = { stage: 'working' }): TicketRow =>
   ({ ...TICKET, ...fields, ...stage })
 export const threadSummary = (fields: Partial<ThreadRow> = {}): ThreadRow => ({
-  key: 'feishu:oc_1:om_root', source: 'feishu', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
+  key: 'chat:oc_1:om_root', source: 'chat', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
   createdAt: '2026-09-22T00:00:00Z', subscriptions: 1, tickets: [{ id: 't1', title: '修复回归', state: 'open' }], evaluating: undefined,
   pending: 0, pollError: undefined, url: undefined, facts: { chat: { value: '团队群' } }, ...fields,
 })
 type TriggerFields = Partial<Omit<TriggerRow, 'disposition' | 'actions'>> & { disposition?: Partial<TriggerRow['disposition']> }
 /** Build a trigger row on the default thread and compute `actions.requeue` using the host's eligibility rules. */
 export function trigger(id: string, at: string, { disposition, ...fields }: TriggerFields = {}): TriggerRow {
-  const row = { id, source: 'feishu', actor: actor('feishu', MEMBER), human: true, at, text: `message ${id}`, preview: `message ${id}`,
-    url: undefined, threads: ['feishu:oc_1:om_root'], ...fields,
+  const row = { id, source: 'chat', actor: actor('chat', MEMBER), human: true, at, text: `message ${id}`, preview: `message ${id}`,
+    url: undefined, threads: ['chat:oc_1:om_root'], ...fields,
     disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined,
       ...disposition } }
   return { ...row, actions: { requeue: requeueable(row) } }
@@ -68,18 +66,21 @@ export function found(id: string, at: string, { threadTitle, filtered,
 }
 export const promptVersion = (revision: number, config: PromptsView['current']['config']): PromptsView['current'] =>
   ({ revision, previousRevision: revision ? revision - 1 : null, savedAt: '', source: 'panel', config })
-/** Build a dropped outbound reply fixture (`feishu` replies to `oc_1`/`om_root`; `github` comments on PR #42). */
-export const droppedReply = (id: string, hoursAgo: number, source: 'feishu' | 'github', reason: DroppedReply['dropped']['reason'],
+/** Build a dropped outbound reply fixture (`chat` replies to `oc_1`/`om_root`; `plan` appends to the log of `login.md`). */
+export const droppedReply = (id: string, hoursAgo: number, source: 'chat' | 'plan', reason: DroppedReply['dropped']['reason'],
   { ticket, thread }: { ticket?: DroppedReply['ticket']; thread?: false } = {}): DroppedReply => ({
   id, preview: `Reply ${id}`, kind: 'reply',
-  channel: source === 'feishu' ? feishuChannel('oc_1', 'om_root') : githubChannel(42),
+  channel: source === 'chat' ? { source: 'chat', thread: 'chat:oc_1', address: { chatId: 'oc_1', messageId: 'om_root' } }
+    : { source: 'plan', thread: 'login.md', address: { path: 'login.md', file: '/repo/docs/plans/login.md', log: '/repo/docs/plans/.superagent/login.md.log.md' } },
   dropped: { at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(), reason }, ...ticket ? { ticket } : {},
-  ...thread === false ? {} : { thread: source === 'feishu' ? 'feishu:oc_1:om_root' : 'github:42' },
+  ...thread === false ? {} : { thread: source === 'chat' ? 'chat:oc_1:om_root' : 'plan:login.md' },
 })
 const dayAgo = () => new Date(Date.now() - 86_400_000).toISOString()
 export const problemOf = (code: SetupCode, values: Record<string, string> = {}) => new SetupError(code, values).problem
-// The kinds' configurations differ, and the fake reads them only as the records the views carry.
-const KINDS = [feishuKind, githubKind] as unknown as SourceKind[]
+// The kinds' configurations differ, and the fake reads them only as the records the views carry. The plan Source here also
+// states a fact about its saved repository, as a kind may, which the panel shows beside that field.
+const KINDS = [chatKind, { ...planKind, facts: (deployment): Record<string, Localized> => deployment ? { repository: { zh: `已检出 ${deployment.repository}`,
+  en: `Checked out at ${deployment.repository}` } } : {} } satisfies typeof planKind] as unknown as SourceKind[]
 export const MACHINE = { stateDir: '/srv/dsh-superagent', promptMaxChars: 100000, admissionContextMaxPages: 10,
   admissionContextTimeoutMs: 15000 }
 
@@ -115,18 +116,16 @@ export let server: PanelServer
 
 function resolved() {
   const accounts = server.setup.accounts
-  return accounts ? testDeployment({ repository: accounts.repository, github: { cli: '/bin/false', login: accounts.agent, noreply: '' },
-    ...accounts.feishu ? { feishu: { cli: '/bin/false', ...accounts.feishu } } : { feishu: undefined } }) : undefined
+  return accounts ? testDeployment({ repository: accounts.repository, plan: { directory: accounts.planDirectory } }) : undefined
 }
-/** Default source health: paused during setup; Feishu defaults to `socket closed` unless overridden or paused by setup. */
+/** Default source health: paused during setup; the chat Source defaults to `socket closed` unless overridden. */
 function healthOf(name: string): Health {
   if (server.setup.problem) return { state: 'paused', detail: 'Waiting for setup', code: 'setupPending' }
   if (server.health[name]) return server.health[name]
-  if (name !== 'feishu') return { state: 'ready', detail: '' }
-  return server.setup.feishuProblem ? { state: 'paused', detail: server.setup.feishuProblem.detail } : { state: 'error',
-    detail: 'socket closed' }
+  if (name !== 'chat') return { state: 'ready', detail: '' }
+  return { state: 'error', detail: 'socket closed' }
 }
-const problemOf_ = (id: string) => [server.setup.problem, server.setup.feishuProblem].find(item => item?.place === id) ?? undefined
+const problemOf_ = (id: string) => server.setup.problem?.place === id ? server.setup.problem : undefined
 function sourceSettings(): SourceView[] {
   return KINDS.map(kind => {
     const config = kind.schema.parse(server.settings.sources[kind.kind]?.config ?? {})
@@ -140,7 +139,7 @@ function sourceSettings(): SourceView[] {
       value: { enabled: server.settings.sources[kind.kind]?.enabled ?? true, config },
         revision: server.revisions[`source:${kind.kind}`] ?? 0,
       restarts: SETUP_FIELDS[kind.kind] ?? [], fields: kind.fields, facts: kind.facts?.(resolved()) ?? {},
-      labels: kind.kind === 'feishu' ? { oc_team: '团队群', oc_other: '另一个群', ...server.joined } : {}, ...problem ? { problem } : {},
+      labels: kind.kind === 'chat' ? { oc_team: '团队群', oc_other: '另一个群', ...server.joined } : {}, ...problem ? { problem } : {},
       ...policy ? { policy } : {} }
   })
 }
@@ -151,10 +150,10 @@ function sourceStatuses(): SourceStatusRow[] {
     const problem = problemOf_(kind.kind)
     const state = !enabled ? 'off' : problem || health.some(item => item.state === 'error') ? 'error' : server.setup.problem ? 'setup'
       : health.some(item => item.state === 'starting') ? 'starting' : health.some(item => item.state === 'paused') ? 'paused' : 'ready'
-    const feishu = kind.kind === 'feishu'
+    const chat = kind.kind === 'chat'
     return { id: kind.kind, title: kind.title, installed: true, enabled, state, health, ...problem ? { problem } : {},
-      stats: { received: feishu ? 12 : 0, filtered: feishu ? 2 : 0, lastAt: '2026-09-23T00:00:00Z' },
-      filtered: feishu ? [] : [{ id: 'e9', at: '2026-09-23T00:02:00Z', actor: actor('github', 'someone'), preview: 'looks wrong',
+      stats: { received: chat ? 12 : 0, filtered: chat ? 2 : 0, lastAt: '2026-09-23T00:00:00Z' },
+      filtered: chat ? [] : [{ id: 'e9', at: '2026-09-23T00:02:00Z', actor: actor('plan', 'someone'), preview: 'looks wrong',
         reason: { code: 'source_disabled' } }],
       dropped: server.dropped.filter(item => item.channel.source === kind.kind && item.dropped.at >= dayAgo()) }
   })
@@ -177,18 +176,17 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
     { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
       en: 'The ticket directory' } },
       { key: 'DSH_SUPERAGENT_NAME', description: { zh: '工单短名', en: 'Short name' } }] },
-    { owner: 'github', enabled: false, variables: [{ key: 'DSH_SUPERAGENT_GITHUB_REPOSITORY', description: { zh: '仓库',
+    { owner: 'plan', enabled: false, variables: [{ key: 'DSH_SUPERAGENT_REPOSITORY', description: { zh: '仓库',
       en: 'Repository' } }] }] },
 })
 const overviewView = (): ApiResponse<'GET overview'> => {
-  const { problem, feishuProblem } = server.setup
-  const setup = problem ?? feishuProblem
+  const setup = server.setup.problem
   return {
     problems: [...setup ? [{ kind: 'setup' as const, ...setup }] : [],
       ...KINDS.some(kind => server.settings.sources[kind.kind]?.enabled !== false) ? [] : [{ kind: 'no-source' as const }],
-      ...feishuProblem || server.settings.sources.feishu?.enabled === false ? [] : [{ kind: 'source-error' as const, source: { id: 'feishu',
-        title: { zh: '飞书', en: 'Feishu' },
-        health: { name: 'feishu', state: 'error' as const, detail: 'socket closed' } } }],
+      ...server.settings.sources.chat?.enabled === false ? [] : [{ kind: 'source-error' as const, source: { id: 'chat',
+        title: chatKind.title,
+        health: { name: 'chat', state: 'error' as const, detail: 'socket closed' } } }],
       ...server.threads.filter(thread => thread.evaluating && thread.evaluating.deadline < new Date().toISOString())
         .map(thread => ({ kind: 'eval-overdue' as const, thread })),
       { kind: 'eval-unavailable' as const, decisionId: 'u1', thread: threadSummary(), reason: [{ code: 'timeout' }], triggerId: 'e3' },
@@ -207,27 +205,26 @@ const overviewView = (): ApiResponse<'GET overview'> => {
 }
 export const acceptDecision = (): NonNullable<TicketPageView['decision']> => ({ id: 'd1', kind: 'accept', outcome: 'accept',
   reason: [{ code: 'explicitRouted' }], at: '2026-09-22T00:00:00Z', strength: 'explicit', ticketId: undefined,
-  triggerIds: ['e1'], thread: 'feishu:oc_1:om_root', rules: [], preview: '@bot 修一下', ticketTitle: undefined })
+  triggerIds: ['e1'], thread: 'chat:oc_1:om_root', rules: [], preview: '@bot 修一下', ticketTitle: undefined })
 const ticketDetail = (): TicketPageView => ({
   ...ticketSummary(), paused: false, decision: acceptDecision(), threads: [threadSummary()],
   mandate: { strength: 'explicit', policyVersion: 'abcdef1234567890', basis: { via: 'addressed', sender: 'Alice', addressed: 'mention' },
-    actor: actor('feishu', MEMBER), scope: '修复登录页回归' },
+    actor: actor('chat', MEMBER), scope: '修复登录页回归' },
   basis: { facts: [{ name: 'sender', value: 'Alice' }, { name: 'addressed', value: 'mention' }], legacy: false },
   environment: [{ key: 'DSH_SUPERAGENT_DIR', value: '/w/t1', description: { zh: '执行目录', en: 'Directory' }, owner: 'executor' },
-    { key: 'DSH_SUPERAGENT_GITHUB_NUMBER', value: '', description: { zh: '编号', en: 'Number' }, owner: 'github' }],
-  channels: [{ source: 'feishu', url: 'https://applink.feishu.cn/client/chat/open?openChatId=oc_1', label: { zh: '飞书消息',
-    en: 'Feishu message' } },
-    { source: 'github', url: 'https://github.com/acme/widgets/issues/42', label: { zh: 'GitHub #42', en: 'GitHub #42' } }],
+    { key: 'DSH_SUPERAGENT_PLAN_FILE', value: '', description: { zh: '计划文件', en: 'Plan file' }, owner: 'plan' }],
+  channels: [{ source: 'chat', url: 'https://chat.example.test/oc_1/om_root', label: { zh: '聊天消息', en: 'Chat message' } },
+    { source: 'plan', url: 'file:///repo/docs/plans/login.md', label: { zh: '计划文件', en: 'Plan file' } }],
   assignments: [{ id: 'a1', state: 'running', createdAt: '2026-09-22T00:00:00Z',
     startedAt: '2026-09-22T00:01:00Z',
     report: { state: 'progress', summary: 'working', at: '2026-09-22T00:02:00Z' } }],
   inputs: [{ id: 'i1', kind: 'trigger', triggerId: 'e2', at: '2026-09-22T00:03:00Z', delivered: false,
-    trigger: { id: 'e2', actor: actor('feishu', MEMBER), human: true, preview: '顺便改标题', thread: 'feishu:oc_1:om_root' } },
+    trigger: { id: 'e2', actor: actor('chat', MEMBER), human: true, preview: '顺便改标题', thread: 'chat:oc_1:om_root' } },
   { id: 'i2', kind: 'policy-changed', at: '2026-09-22T00:04:00Z', delivered: true, from: 'aaaaaaaaaaaaaaaa', to: 'bbbbbbbbbbbbbbbb' }],
 })
 function threadPage(key: string, { before, around }: { before?: string; around?: string }): ThreadPageView | undefined {
   if (key !== threadSummary().key) return undefined
-  const base = { ...threadSummary(), tickets: [ticketSummary()], correlated: [{ key: 'github:42', title: 'PR 42' }], decisions: [],
+  const base = { ...threadSummary(), tickets: [ticketSummary()], correlated: [{ key: 'plan:login.md', title: 'login.md' }], decisions: [],
     url: 'https://example.test/thread', context: [] }
   const decision = { id: 'd1', outcome: 'accept' as const, reason: [{ code: 'said', values: { text: 'x' } }], ticketId: 't1' }
   if (before === 'cursor-1' || around === 'e1') return { ...base, timeline: [trigger('e1', '2026-09-20T00:00:00Z',
@@ -237,28 +234,24 @@ function threadPage(key: string, { before, around }: { before?: string; around?:
 }
 function initial(): PanelServer {
   const settings = SettingsSchema.parse({
-    policy: { sources: { feishu: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: 'oc_team' },
-      github: { allowed: [{ id: 'alice' }] } },
+    policy: { sources: { chat: { allowed: [{ id: 'ou_alice', name: 'Alice' }], syncChat: 'oc_team' },
+      plan: { allowed: [{ id: OPERATOR }] } },
       rules: [{ id: 'copy', name: '文案修改', enabled: true, instruction: '修正明确的文案错误' }] },
-    sources: { feishu: { enabled: true, config: { cli: 'lark-bot', chats: [{ chatId: 'oc_team', listen: 'mentions' }],
-      directMessages: true } },
-      github: { enabled: true, config: { repository: 'acme/widgets', cli: 'gh-agent' } } },
-    executor: { blockedCommands: ['gh-personal'] },
+    sources: { chat: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }], directMessages: true } },
+      plan: { enabled: true, config: { repository: '/repo', directory: 'docs/plans' } } },
+    executor: { blockedCommands: ['personal-cli'] },
   })
   const ended = ticketSummary({ id: 't0', title: '旧工单', state: 'ended', actions: { retry: false, stop: false },
     ended: { at: '2026-09-21T00:00:00Z', by: 'human', reason: 'Human asked to stop', outcome: 'stopped' } }, { stage: 'ended' })
-  const reply = { source: 'feishu', url: 'https://applink.feishu.cn/client/chat/open?openChatId=oc_1', label: { zh: '飞书消息',
-    en: 'Feishu message' } }
+  const reply = { source: 'chat', url: 'https://chat.example.test/oc_1/om_root', label: { zh: '聊天消息', en: 'Chat message' } }
   const defaults = { revision: 0, previousRevision: null, savedAt: '', source: 'defaults' }
   return {
     health: {}, down: false, pending: 0, opened: [], requests: [], misuse: [], queued: new Set(), dropped: [], failing: [],
     subagents: { 'claude-code': { enabled: false, mounted: false, available: null, version: '', error: '' },
       codex: { enabled: false, mounted: false, available: null, version: '', error: '' } },
-    setup: { machine: MACHINE, problem: null, feishuProblem: null,
-      accounts: { repository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
-        name: 'Widgets Bot' } } },
+    setup: { machine: MACHINE, problem: null, accounts: { repository: '/repo', planDirectory: '/repo/docs/plans' } },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
-    prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: ['feishu', 'github'],
+    prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: [],
       skillPrefix: SKILL_PREFIX, revision: 0, current: { ...defaults, config: defaultPrompts() },
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
@@ -272,13 +265,13 @@ function initial(): PanelServer {
     search: { items: [], threads: [] },
     history: { current: 3, policyVersion: 'abcdef1234567890', items: [
       { revision: 4, savedAt: '2026-09-23T00:00:00Z', source: 'panel', policyVersion: '9876543210fedcba', policyChanged: true, notified: [],
-        block: 'source:feishu',
-        changes: [{ code: 'sourceRowsAdded', source: 'feishu', field: 'chats', items: ['oc_team'] }] },
+        block: 'source:chat',
+        changes: [{ code: 'sourceRowsAdded', source: 'chat', field: 'chats', items: ['oc_team'] }] },
       { revision: 3, savedAt: '2026-09-22T00:00:00Z', source: 'panel', policyVersion: 'abcdef1234567890', policyChanged: true,
         notified: [{ id: 't1', title: '修复回归' }], block: 'policy',
-        changes: [{ code: 'mode', from: 'off', to: 'observe' }, { code: 'sourceField', source: 'feishu', field: 'directMessages',
+        changes: [{ code: 'mode', from: 'off', to: 'observe' }, { code: 'sourceField', source: 'chat', field: 'directMessages',
           from: true, to: false },
-          { code: 'sourceRowsAdded', source: 'feishu', field: 'chats', items: ['oc_other', 'oc_new'] }] }] },
+          { code: 'sourceRowsAdded', source: 'chat', field: 'chats', items: ['oc_other', 'oc_new'] }] }] },
   }
 }
 
@@ -371,12 +364,13 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     else if (source) {
       const { enabled, config: value } = SourceSave.parse(body.value)
       const config = source.schema.parse(value)
-      // As on the server, a changed CLI that fails its check refuses the save with the setup problem.
-      if (config.cli === 'lark-broken') {
-        const refused = new SetupError('feishuCliFailed', { output: 'lark-cli: app secret missing' })
+      // As on the server, a changed setup field that fails its check refuses the save with the setup problem.
+      const fields = SETUP_FIELDS[source.kind] ?? []
+      if (config.repository === '/missing') {
+        const refused = new SetupError('repositoryMissing', { repository: '/missing', output: 'stat /missing: no such file or directory' })
         return refuse(400, refused.message, { setup: refused.problem })
       }
-      restarting = (config.cli ?? '') !== (server.settings.sources[source.kind]?.config.cli ?? '')
+      restarting = fields.some(field => (config[field] ?? '') !== (server.settings.sources[source.kind]?.config[field] ?? ''))
       server.settings = { ...server.settings, sources: { ...server.settings.sources, [source.kind]: { enabled, config } } }
     }
     server.revisions[block] = (server.revisions[block] ?? 0) + 1
@@ -405,7 +399,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     return { revision: server.prompts.revision, context_delivery: 'injected' }
   } },
   'POST prompts/preview': { body: true, answer: ({ body }) => {
-    const skills = [...server.setup.accounts?.feishu ? ['feishu'] : [], 'github', ...Object.keys(body.skills)].map(name => [name,
+    const skills = Object.keys(body.skills).map(name => [name,
       composeSkill(body, name)])
     // The generated parts from their templates, without variables or rules.
     const environment = environmentSection(body, []), policy = policySection(SettingsSchema.parse({ policy: { rules: [] } }), body)

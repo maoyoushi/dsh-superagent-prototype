@@ -46,19 +46,19 @@ it('filters the Thread list by activity, and unsubscribes from a Thread page aft
   await click('这个文案好奇怪')
   await click(zh.unsubscribe)
   await click(zh.confirm)
-  expect(server.requests.some(request => request.path === 'threads/feishu:oc_1:om_root/unsubscribe')).toBe(true)
+  expect(server.requests.some(request => request.path === 'threads/chat:oc_1:om_root/unsubscribe')).toBe(true)
 })
 
 it('folds consecutive automated messages from one sender on a Thread, showing the newest with its text', async () => {
-  const bot = (id: string, at: string) => trigger(id, at, { actor: { source: 'github', id: '' }, human: false,
-    text: `CI of PR #42 at abc1234: 3 checks, 0 failed, ${id === 'b3' ? 0 : 1} running.`, preview: `CI ${id}` })
+  const bot = (id: string, at: string) => trigger(id, at, { actor: { source: 'chat', id: '' }, human: false,
+    text: `Check run at abc1234: 3 checks, 0 failed, ${id === 'b3' ? 0 : 1} running.`, preview: `CI ${id}` })
   server.threadPages = () => ({ ...threadSummary(), tickets: [], correlated: [], decisions: [], earlier: null, context: [],
     timeline: [bot('b1', '2026-09-23T00:00:00Z'), bot('b2', '2026-09-23T00:01:00Z'), trigger('h1', '2026-09-23T00:02:00Z'), bot('b3',
       '2026-09-23T00:03:00Z'), bot('b4', '2026-09-23T00:04:00Z')] })
   await mount()
   await click(zh['tab.trigger'])
   await click('这个文案好奇怪')
-  expect(all('.dt-event .dt-event-text').map(element => element.textContent)).toEqual(['CI of PR #42 at abc1234: 3 checks, 0 failed, 1 running.', 'message h1', 'CI of PR #42 at abc1234: 3 checks, 0 failed, 1 running.'])
+  expect(all('.dt-event .dt-event-text').map(element => element.textContent)).toEqual(['Check run at abc1234: 3 checks, 0 failed, 1 running.', 'message h1', 'Check run at abc1234: 3 checks, 0 failed, 1 running.'])
   const folds = all('.dt-event').map(event => event.querySelector('button.dt-textlink[aria-expanded]')?.textContent ?? '')
   expect(folds).toEqual(['同一发送者之前还有 1 条自动消息', '', '同一发送者之前还有 1 条自动消息'])
   await click(find('同一发送者之前还有 1 条自动消息'))
@@ -68,11 +68,11 @@ it('folds consecutive automated messages from one sender on a Thread, showing th
 it('reads the page around a link\'s target once, also for a Trigger the Thread does not have, while it polls the newest page', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
   onTestFinished(() => { vi.useRealTimers() })
-  at({ page: 'trigger', id: 'feishu:oc_1:om_root', query: { trigger: 'gone' } })
+  at({ page: 'trigger', id: 'chat:oc_1:om_root', query: { trigger: 'gone' } })
   await mount()
   await act(async () => { await vi.advanceTimersByTimeAsync(5000) }); await settle()
   expect(server.requests.filter(request => request.path.startsWith('threads/')).map(request => request.path)).toEqual([
-    'threads/feishu:oc_1:om_root?limit=50', 'threads/feishu:oc_1:om_root?limit=50&around=gone', 'threads/feishu:oc_1:om_root?limit=50'])
+    'threads/chat:oc_1:om_root?limit=50', 'threads/chat:oc_1:om_root?limit=50&around=gone', 'threads/chat:oc_1:om_root?limit=50'])
 })
 
 it('shows a follow-up delivered to its Ticket without an Eval, a hand-back with why, and a Ticket that follows the Thread for context', async () => {
@@ -81,7 +81,7 @@ it('shows a follow-up delivered to its Ticket without an Eval, a hand-back with 
     timeline: [trigger('f1', '2026-09-23T00:00:00Z', { disposition: { delivered: true, fanout: ['t1'] } }),
       trigger('f2', '2026-09-23T00:01:00Z', { disposition: { queued: true, fanout: ['t1'], handbacks: [{ ticketId: 't1', title: '修复回归',
         reason: 'Asks for a new page', at: '2026-09-23T00:02:00Z' }] } })] })
-  at({ page: 'trigger', id: 'feishu:oc_1:om_root' })
+  at({ page: 'trigger', id: 'chat:oc_1:om_root' })
   await mount()
   const events = () => all('.dt-event').map(event => [event.querySelector('.dt-event-text')?.textContent,
     [...event.querySelectorAll('.dt-tag')].map(tag => tag.textContent), event.querySelector('.dt-hint')?.textContent])
@@ -118,7 +118,7 @@ it('reads back the Triggers between the newest page and the earlier ones it show
   vi.useFakeTimers({ shouldAdvanceTime: true })
   onTestFinished(() => { vi.useRealTimers() })
   const thread = busyThread(120)
-  at({ page: 'trigger', id: 'feishu:oc_1:om_root' })
+  at({ page: 'trigger', id: 'chat:oc_1:om_root' })
   await mount()
   expect(shown()).toEqual(range(70, 119))
   await click(zh.loadEarlier)
@@ -136,7 +136,7 @@ it('reads back the Triggers between the newest page and the earlier ones it show
 
 it('shows a link\'s target far back with every Trigger after it', async () => {
   busyThread(120)
-  at({ page: 'trigger', id: 'feishu:oc_1:om_root', query: { trigger: 'm10' } })
+  at({ page: 'trigger', id: 'chat:oc_1:om_root', query: { trigger: 'm10' } })
   await mount()
   expect(shown()).toEqual(range(0, 119))
   expect(document.querySelector('.dt-highlight .dt-event-text')?.textContent).toBe('message m10')

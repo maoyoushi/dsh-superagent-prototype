@@ -8,8 +8,8 @@ import { server, found } from './fixtures/panel-server.ts'
 
 usePanel()
 it('states why a filtered search result has no Thread instead of opening an empty one', async () => {
-  server.search = { items: [found('e9', '2026-09-20T00:00:00Z', { source: 'github', actor: { source: 'github', id: 'someone' },
-    preview: 'issue text', threads: ['github:7'],
+  server.search = { items: [found('e9', '2026-09-20T00:00:00Z', { source: 'plan', actor: { source: 'plan', id: 'someone' },
+    preview: 'issue text', threads: ['plan:x.md'],
     filtered: 'source_disabled' })], threads: [] }
   await mount()
   await type(field<HTMLInputElement>(zh.searchLabel), 'issue')

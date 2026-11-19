@@ -82,9 +82,9 @@ describe('intake', () => {
   })
   it('records correlation for a trigger on several threads and evaluates only on the primary one', () => {
     const h = harness()
-    h.engine.receive(trigger('1', { threads: [{ source: 'gh', id: 'pr-7' }, { source: 'gh', id: 'run-9' }] }))
-    expect(h.repo.threads.get('gh:pr-7')).toMatchObject({ pending: ['1'], correlated: ['gh:run-9'] })
-    expect(h.repo.threads.get('gh:run-9')).toMatchObject({ pending: [], correlated: ['gh:pr-7'] })
+    h.engine.receive(trigger('1', { threads: [{ source: 'review', id: 'pr-7' }, { source: 'review', id: 'run-9' }] }))
+    expect(h.repo.threads.get('review:pr-7')).toMatchObject({ pending: ['1'], correlated: ['review:run-9'] })
+    expect(h.repo.threads.get('review:run-9')).toMatchObject({ pending: [], correlated: ['review:pr-7'] })
   })
 })
 describe('eval', () => {
@@ -282,8 +282,8 @@ describe('subscription fan-out', () => {
       .toEqual([{ threadKey: 'chat:t2', ticketId: first, by: 'executor', reason: 'about another fix' }])
     expect(() => h.engine.markUnrelated(first, 'chat:t2', 'again')).toThrow(new UserError('notFollowing'))
     expect(() => h.engine.markUnrelated(first, 'chat:t1', 'its own')).toThrow(new UserError('sourceThread'))
-    h.engine.bindThread(first, { source: 'gh', id: 'pr-9' }, true)
-    expect(() => h.engine.markUnrelated(first, 'gh:pr-9', 'its PR')).toThrow(new UserError('followedThread'))
+    h.engine.bindThread(first, { source: 'review', id: 'pr-9' }, true)
+    expect(() => h.engine.markUnrelated(first, 'review:pr-9', 'its PR')).toThrow(new UserError('followedThread'))
   })
 })
 describe('resume and stop', () => {
@@ -543,12 +543,12 @@ describe('follow-up owners', () => {
     for (const taken of [true, false]) {
       const h = harness()
       const ticketId = accepted(h).ticketId!
-      h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, true)
+      h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, true)
       h.engine.report(ticketId, { state: 'ready', summary: 'PR ready' })
       // A person asks for one more change, which the worker takes up or has not yet, and the pull request merges meanwhile.
       h.tick(1); h.engine.receive(trigger('2')); h.settle()
       if (taken) h.engine.reply({ purpose: 'acknowledgement', ticketId, triggerId: '2', text: 'On it' })
-      h.engine.threadClosed({ source: 'gh', id: 'pr-9' }, 'merged', '2026-09-23T00:00:01Z')
+      h.engine.threadClosed({ source: 'review', id: 'pr-9' }, 'merged', '2026-09-23T00:00:01Z')
       // One it has not taken up leaves the merge to end the ticket, and goes to Eval.
       expect([h.repo.tickets.get(ticketId)!.ended?.outcome, h.repo.threads.get('chat:t1')!.pending]).toEqual(taken ? [undefined, []]
         : ['merged', ['2']])
@@ -797,12 +797,12 @@ describe('worker reports', () => {
       const h = harness()
       const ticketId = accepted(h).ticketId!
       h.engine.report(ticketId, { state: 'progress', summary: 'asking', question: 'Merge it?' })
-      if (follows) h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, false)
-      if (follows) h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-10' }, true)
+      if (follows) h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, false)
+      if (follows) h.engine.bindThread(ticketId, { source: 'review', id: 'pr-10' }, true)
       // Work resumed after both closed ends with its ready report, using the latest close outcome.
       if (closed) {
-        h.engine.threadClosed({ source: 'gh', id: 'pr-9' }, 'closed', '2026-09-22T00:00:00Z')
-        h.engine.threadClosed({ source: 'gh', id: 'pr-10' }, 'merged', '2026-09-22T00:00:01Z')
+        h.engine.threadClosed({ source: 'review', id: 'pr-9' }, 'closed', '2026-09-22T00:00:00Z')
+        h.engine.threadClosed({ source: 'review', id: 'pr-10' }, 'merged', '2026-09-22T00:00:01Z')
       }
       h.engine.report(ticketId, { state, summary: 'done' })
       return h.repo.tickets.get(ticketId)!
@@ -811,7 +811,7 @@ describe('worker reports', () => {
     expect(outcome('dropped', true).ended).not.toHaveProperty('reason')
     expect(outcome('ready', false)).toMatchObject({ ended: { outcome: 'completed' } })
     expect(outcome('ready', false)).not.toHaveProperty('attention')
-    expect(outcome('ready', true)).toMatchObject({ follows: [{ thread: 'gh:pr-9', own: false }, { thread: 'gh:pr-10', own: true }],
+    expect(outcome('ready', true)).toMatchObject({ follows: [{ thread: 'review:pr-9', own: false }, { thread: 'review:pr-10', own: true }],
       assignments: [expect.objectContaining({ report: expect.objectContaining({ state: 'ready' }) })] })
     expect(outcome('ready', true)).not.toHaveProperty('ended')
     expect(outcome('ready', true)).not.toHaveProperty('attention')
@@ -1054,31 +1054,31 @@ describe('ticket commands', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
     // It started from someone's PR and opened its own.
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-5' }, false)
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-7' }, true)
-    h.engine.threadClosed({ source: 'gh', id: 'pr-7' }, 'merged', '2026-09-23T00:00:00Z')
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-5' }, false)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-7' }, true)
+    h.engine.threadClosed({ source: 'review', id: 'pr-7' }, 'merged', '2026-09-23T00:00:00Z')
     expect(h.repo.tickets.get(ticketId)!.ended).toMatchObject({ outcome: 'merged' })
     // A person's comment resumes it; its ready report ends it again as its own PR did, though the one it started from is open.
-    h.tick(10); h.engine.receive(trigger('2', { threads: [{ source: 'gh', id: 'pr-5' }] })); h.settle()
+    h.tick(10); h.engine.receive(trigger('2', { threads: [{ source: 'review', id: 'pr-5' }] })); h.settle()
     expect(h.repo.tickets.get(ticketId)).not.toHaveProperty('ended')
     h.engine.report(ticketId, { state: 'ready', summary: 'Answered' })
     expect(h.repo.tickets.get(ticketId)!.ended).toMatchObject({ outcome: 'merged' })
     // The PR it started from closing later changes nothing.
-    h.engine.threadClosed({ source: 'gh', id: 'pr-5' }, 'closed', '2026-09-23T00:00:30Z')
+    h.engine.threadClosed({ source: 'review', id: 'pr-5' }, 'closed', '2026-09-23T00:00:30Z')
     expect(h.repo.tickets.get(ticketId)!.ended).toMatchObject({ outcome: 'merged' })
     // A ticket that opened no PR ends when the one it follows closes, as it did.
     const other = accepted(h, '3', 't3').ticketId!
-    h.engine.bindThread(other, { source: 'gh', id: 'pr-8' }, false)
+    h.engine.bindThread(other, { source: 'review', id: 'pr-8' }, false)
     h.engine.report(other, { state: 'ready', summary: 'Pushed to their branch' })
     expect(h.repo.tickets.get(other)).not.toHaveProperty('ended')
-    h.engine.threadClosed({ source: 'gh', id: 'pr-8' }, 'closed', '2026-09-23T00:01:00Z')
+    h.engine.threadClosed({ source: 'review', id: 'pr-8' }, 'closed', '2026-09-23T00:01:00Z')
     expect(h.repo.tickets.get(other)!.ended).toMatchObject({ outcome: 'closed' })
   })
   it('stops following a Thread whose Subscription a person removes', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-7' }, true)
-    expect(h.engine.unsubscribe('gh:pr-7')).toBe(true)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-7' }, true)
+    expect(h.engine.unsubscribe('review:pr-7')).toBe(true)
     expect(h.repo.tickets.get(ticketId)).not.toHaveProperty('follows')
     // Its ready report completes it, since it follows no Thread now.
     h.engine.report(ticketId, { state: 'ready', summary: 'Done' })
@@ -1089,24 +1089,24 @@ describe('ticket commands', () => {
     const ticketId = accepted(h).ticketId!
     const close = (id: string, outcome: 'merged' | 'closed', at: string) => {
       const open = h.repo.tickets.open().map(ticket => ticket.id)
-      h.engine.threadClosed({ source: 'gh', id }, outcome, at)
+      h.engine.threadClosed({ source: 'review', id }, outcome, at)
       return open.filter(item => h.repo.tickets.get(item)!.ended)
     }
-    expect(h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, false)).toMatchObject({ follows: [{ thread: 'gh:pr-9', own: false }] })
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-10' }, true)
-    expect(h.repo.threads.get('gh:pr-9')!.subscriptions).toEqual([ticketId])
+    expect(h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, false)).toMatchObject({ follows: [{ thread: 'review:pr-9', own: false }] })
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-10' }, true)
+    expect(h.repo.threads.get('review:pr-9')!.subscriptions).toEqual([ticketId])
     // The Thread it started from closes while its own is open: it records the close and works on.
     expect(close('pr-9', 'closed', '2026-09-23T00:00:00Z')).toEqual([])
-    expect(h.repo.tickets.get(ticketId)).toMatchObject({ follows: [{ thread: 'gh:pr-9', closed: { outcome: 'closed' } }, { thread: 'gh:pr-10' }] })
+    expect(h.repo.tickets.get(ticketId)).toMatchObject({ follows: [{ thread: 'review:pr-9', closed: { outcome: 'closed' } }, { thread: 'review:pr-10' }] })
     expect(h.repo.tickets.get(ticketId)).not.toHaveProperty('ended')
     // Its own closes too: it ends as that one did, when it did, once.
     expect(close('pr-10', 'merged', '2026-09-23T00:00:01Z')).toEqual([ticketId])
     expect(h.repo.tickets.get(ticketId)).toMatchObject({ ended: { by: 'executor', outcome: 'merged', at: '2026-09-23T00:00:01.000Z' } })
     expect(close('pr-10', 'merged', '2026-09-23T00:00:01Z')).toEqual([])
-    expect(() => h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-11' }, true)).toThrow(new UserError('ticketEnded'))
+    expect(() => h.engine.bindThread(ticketId, { source: 'review', id: 'pr-11' }, true)).toThrow(new UserError('ticketEnded'))
     // A ticket retried after its PR closed but before the close was reported works on until it reports ready.
     const other = accepted(h, '2', 't2').ticketId!
-    h.engine.bindThread(other, { source: 'gh', id: 'pr-12' }, true)
+    h.engine.bindThread(other, { source: 'review', id: 'pr-12' }, true)
     h.engine.report(other, { state: 'failed', summary: 'tests fail' })
     h.tick(10); h.engine.retryTicket(other)
     expect(close('pr-12', 'closed', '2026-09-23T00:00:05Z')).toEqual([])
@@ -1290,8 +1290,8 @@ describe('gaps', () => {
     expect(h.outbox).toHaveLength(sent + 1)
     // A ticket whose PR closed unmerged, or that a person stopped, has no result to send.
     const closed = accepted(h, '5', 't5').ticketId!
-    h.engine.bindThread(closed, { source: 'gh', id: 'pr-1' }, true)
-    h.engine.threadClosed({ source: 'gh', id: 'pr-1' }, 'closed', '2026-09-23T00:01:00Z')
+    h.engine.bindThread(closed, { source: 'review', id: 'pr-1' }, true)
+    h.engine.threadClosed({ source: 'review', id: 'pr-1' }, 'closed', '2026-09-23T00:01:00Z')
     expect(() => h.engine.reply({ purpose: 'result', ticketId: closed, text: 'x' })).toThrow(new UserError('notReady'))
     const stopped = accepted(h, '6', 't6').ticketId!
     h.engine.stopTicket(stopped)
@@ -1359,14 +1359,14 @@ describe('final review: close times', () => {
   it('records a Source\'s close time in the canonical form, and keeps the ticket\'s updatedAt moving forward', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-1' }, true)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-1' }, true)
     h.tick(30)
     const before = h.repo.tickets.get(ticketId)!.updatedAt
-    // GitHub gives whole seconds, and the PR merged before the ticket's last change.
-    h.engine.threadClosed({ source: 'gh', id: 'pr-1' }, 'merged', '2026-09-23T00:00:05Z')
+    // A Source may give whole seconds, and the followed Thread merged before the ticket's last change.
+    h.engine.threadClosed({ source: 'review', id: 'pr-1' }, 'merged', '2026-09-23T00:00:05Z')
     const ended = h.repo.tickets.get(ticketId)!
     expect(ended.ended).toMatchObject({ at: '2026-09-23T00:00:05.000Z', outcome: 'merged' })
-    expect(ended.follows).toEqual([{ thread: 'gh:pr-1', own: true, closed: { at: '2026-09-23T00:00:05.000Z', outcome: 'merged' } }])
+    expect(ended.follows).toEqual([{ thread: 'review:pr-1', own: true, closed: { at: '2026-09-23T00:00:05.000Z', outcome: 'merged' } }])
     expect(ended.updatedAt >= before).toBe(true)
   })
 })
@@ -1384,11 +1384,11 @@ describe('model-surface review', () => {
   })
 })
 describe('follow-up review: turn ends', () => {
-  const merge = (h: ReturnType<typeof harness>) => h.engine.threadClosed({ source: 'gh', id: 'pr-9' }, 'merged', '2026-09-23T00:00:01Z')
+  const merge = (h: ReturnType<typeof harness>) => h.engine.threadClosed({ source: 'review', id: 'pr-9' }, 'merged', '2026-09-23T00:00:01Z')
   it('lets a merge send to Eval only the messages its worker had no turn to read after its ready report', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, true)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, true)
     h.engine.report(ticketId, { state: 'ready', summary: 'PR ready' })
     // A person thanks the worker, which reads it in a turn and leaves it; another message comes after that turn.
     h.tick(1); h.engine.receive(trigger('2')); h.settle(); h.read(ticketId)
@@ -1400,7 +1400,7 @@ describe('follow-up review: turn ends', () => {
   it('keeps a ticket open at a merge while its worker works on a message it took up, also after a progress report', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, true)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, true)
     h.engine.report(ticketId, { state: 'ready', summary: 'PR ready' })
     h.tick(1); h.engine.receive(trigger('2')); h.settle()
     h.engine.reply({ purpose: 'acknowledgement', ticketId, triggerId: '2', text: 'On it' })
@@ -1412,7 +1412,7 @@ describe('follow-up review: turn ends', () => {
   it('ends a ticket whose close it deferred as the close did when its worker then drops the work', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, true)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, true)
     h.engine.report(ticketId, { state: 'ready', summary: 'PR ready' })
     h.tick(1); h.engine.receive(trigger('2')); h.settle()
     h.engine.reply({ purpose: 'acknowledgement', ticketId, triggerId: '2', text: 'On it' })
@@ -1518,11 +1518,11 @@ describe('what a worker read', () => {
   it('sends to Eval at a merge a message that reached the worker after its last step, which no step took before its turn ended', () => {
     const h = harness()
     const ticketId = accepted(h).ticketId!
-    h.engine.bindThread(ticketId, { source: 'gh', id: 'pr-9' }, true)
+    h.engine.bindThread(ticketId, { source: 'review', id: 'pr-9' }, true)
     h.engine.report(ticketId, { state: 'ready', summary: 'PR ready' })
     h.tick(1); h.engine.receive(trigger('2')); h.settle()
     h.tick(1); h.engine.turnEnded(ticketId, runningAssignment(h.repo.tickets.get(ticketId)!)!.id)
-    h.engine.threadClosed({ source: 'gh', id: 'pr-9' }, 'merged', '2026-09-23T00:00:01Z')
+    h.engine.threadClosed({ source: 'review', id: 'pr-9' }, 'merged', '2026-09-23T00:00:01Z')
     expect(h.repo.threads.get('chat:t1')!.pending).toEqual(['2'])
   })
   it('counts a message a retry delivered after a failure and a turn end as read by a dropped report only once a step took it', () => {

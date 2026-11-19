@@ -34,7 +34,7 @@ export const planKind: SourceKind<PlanConfig> = {
   schema: PlanConfigSchema,
   fields: [
     { key: 'repository', type: 'text', pattern: '/.*', label: { zh: '仓库目录', en: 'Repository directory' },
-      hint: { zh: '本地 git 检出的绝对路径；执行器在每个工单的目录里基于它工作。', en: 'Absolute path of the local git checkout; the Executor works from it in each Ticket\'s directory.' } },
+      hint: { zh: '本地 git 检出的绝对路径；执行器在每个工单的目录里基于它工作。保存时检查它和计划目录，然后重启 dsh-superagent。', en: 'Absolute path of the local git checkout; the Executor works from it in each Ticket\'s directory. Saving checks it and the plan directory, then restarts dsh-superagent.' } },
     { key: 'directory', type: 'text', label: { zh: '计划目录', en: 'Plan directory' },
       hint: { zh: '相对仓库目录的路径，或绝对路径。其下每个 Markdown 文件是一份计划；隐藏目录不读。', en: 'A path relative to the repository directory, or absolute. Every Markdown file below it is a plan; hidden directories are not read.' } },
     { key: 'includeExisting', type: 'switch', label: { zh: '接收已有的计划', en: 'Receive existing plans' },
@@ -64,7 +64,7 @@ export const planKind: SourceKind<PlanConfig> = {
       { key: 'DSH_SUPERAGENT_REPOSITORY', description: { zh: '本地 git 检出的绝对路径', en: 'Absolute path of the local git checkout' } },
       { key: 'DSH_SUPERAGENT_PLAN_DIR', description: { zh: '计划目录的绝对路径', en: 'Absolute path of the plan directory' } },
       { key: 'DSH_SUPERAGENT_PLAN_FILE', description: { zh: '这个工单来源计划文件的绝对路径；不要修改它', en: 'Absolute path of this ticket\'s plan file; never edit it' } }],
-    values: ({ config, trigger }) => ({ DSH_SUPERAGENT_REPOSITORY: config.repository, DSH_SUPERAGENT_PLAN_DIR: planRoot(config),
+    values: ({ deployment, trigger }) => ({ DSH_SUPERAGENT_REPOSITORY: deployment.repository, DSH_SUPERAGENT_PLAN_DIR: deployment.plan.directory,
       DSH_SUPERAGENT_PLAN_FILE: typeof trigger?.meta.file === 'string' ? trigger.meta.file : '' }),
   },
 }
@@ -73,7 +73,7 @@ export const planKind: SourceKind<PlanConfig> = {
 export function planTrigger(root: string, plan: PlanFile): Trigger {
   const address = { path: plan.path, file: plan.file, log: planLog(root, plan.path) }
   return { id: key(SOURCE, plan.path, plan.hash), source: SOURCE, threads: [{ source: SOURCE, id: plan.path }], actor: { source: SOURCE, id: OPERATOR },
-    human: true, addressed: 'direct', at: plan.at, text: plan.text, channel: { source: SOURCE, thread: plan.path, address },
+    human: true, addressed: 'direct', at: plan.at, text: plan.text, channel: { source: SOURCE, thread: `${SOURCE}:${plan.path}`, address },
     url: pathToFileURL(plan.file).href, meta: { path: plan.path, file: plan.file, hash: plan.hash } }
 }
 
@@ -128,7 +128,6 @@ async function watch(ctx: SourceContext, signal: AbortSignal): Promise<void> {
     const config = ctx.config<PlanConfig>(SOURCE)
     try {
       if (!config) ctx.report('plan', health('paused', 'sourceOff'))
-      else if (!config.repository) ctx.report('plan', health('paused', 'planRepositoryUnset'))
       else await checkPlans(ctx, config)
       failures = 0
     } catch (error) {

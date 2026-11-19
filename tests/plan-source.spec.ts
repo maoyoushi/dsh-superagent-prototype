@@ -1,6 +1,5 @@
 /** The plan Source: plan files in a local checkout as Triggers from `operator`, their Tickets, and the reply log. */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { checkPlans, planKind, planRoot, OPERATOR, type PlanConfig } from '../src/sources/plan.ts'
@@ -14,16 +13,13 @@ const config = (overrides: Partial<PlanConfig> = {}): PlanConfig => planKind.sch
 const write = (path: string, text: string) => { mkdirSync(join(repository, 'plans', path, '..'), { recursive: true }); writeFileSync(join(repository, 'plans', path), text) }
 /** The stored Trigger of a plan file's revision, by the id the Source derives from its path and content. */
 const triggerOf = (path: string, text: string) => h.runtime.store.triggers.get(key('plan', path, key('plan-file', text)))!
+// The host's checkout, whose `plans` directory setup checked, and the plan Source and its operator on the allowed list.
 beforeEach(async () => {
-  repository = mkdtempSync(join(tmpdir(), 'plan-source-'))
   h = await startRuntime()
-  h.runtime.sources.register(planKind)
-  const settings = h.runtime.store.settings()
-  h.runtime.store.saveSettings({ ...settings, sources: { ...settings.sources, plan: { enabled: true, config: config() } },
-    policy: { ...settings.policy, sources: { ...settings.policy.sources, plan: { allowed: [{ id: OPERATOR }], admission: {} } } } })
+  repository = h.repository
   ctx = h.runtime.context(planKind)
 })
-afterEach(async () => { await h.stop(); rmSync(repository, { recursive: true, force: true }) })
+afterEach(async () => { await h.stop() })
 
 it('takes the plans present at its first check as a baseline, and receives each added or changed plan as the operator\'s request', async () => {
   write('existing.md', '# Existing plan')

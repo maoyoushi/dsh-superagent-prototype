@@ -4,7 +4,7 @@
   "license": "MIT",
   "version": "0.1.0",
   "private": true,
-  "description": "A proactive agent for one GitHub repository, as a DSH (DeepSeek Harness) bundle: it listens to GitHub and optionally Feishu, evaluates requests under a Policy, turns authorized ones into Tickets, and executes each in its own DSH Session.",
+  "description": "A proactive coding agent for one local git repository, as a DSH (DeepSeek Harness) bundle: it takes plan files the operator writes, evaluates requests under a Policy, turns authorized ones into Tickets, and executes each in its own DSH Session that delegates subtasks to Claude Code and Codex.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -14,8 +14,6 @@
       "default": "./lib/index.js"
     },
     "./client": "./lib/client.js",
-    "./github-watch": "./lib/github-watch.js",
-    "./feishu-watch": "./lib/feishu-watch.js",
     "./plan-watch": "./lib/plan-watch.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
@@ -25,8 +23,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "README.md",
-    "prompts",
-    "skills"
+    "prompts"
   ],
   "dsh": {
     "bundle": {

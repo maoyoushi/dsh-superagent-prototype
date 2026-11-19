@@ -5,16 +5,12 @@ import { Later } from '../src/app/effects.ts'
 import { reportRelay } from '../src/app/notices.ts'
 import { WorkerSlots, inputMessage, mandateInstructions, ticketExecution, transient, triggerMessage } from '../src/executor/dsh.ts'
 import { SettingsSchema } from '../src/policy.ts'
-import { Commands } from '../src/infra/commands.ts'
 import { deferred, waitUntil } from './fixtures/async.ts'
-import { CHAT, MEMBER, feishu, startRuntime, type Host } from './fixtures/host.ts'
+import { CHAT, chat, startRuntime, type Host } from './fixtures/host.ts'
 
 let h: Host
 beforeEach(async () => { h = await startRuntime() })
 afterEach(async () => { await h.stop() })
-const lark = { users: [{ member_id: MEMBER, name: 'Alice' }], has_more: false }
-const linkLookedUp = (messageId: string) =>
-  vi.mocked(Commands.prototype.lark).mock.calls.some(([args]) => args.includes('+messages-mget') && args.includes(messageId))
 /** Hold the first resolution of a Session until `gate` resolves; `held()` says whether it began. */
 function holdSession(sessionId: string, gate: Promise<void>) {
   let held = false
@@ -28,32 +24,37 @@ const idle = (sessionId: string) => {
   h.ctx.emit('agent/status', { agent, status: 'idle' } as never)
 }
 
-it('evaluates a message that arrives on a thread while an earlier candidate\'s card waits for its link, in the thread\'s next Eval', async () => {
+it('evaluates a message that arrives on a thread while an earlier candidate\'s card waits for the main Session, in the thread\'s next Eval', async () => {
   const gate = deferred()
-  // The first candidate's source link lookup is slow; Feishu allows it up to linkTimeoutMs.
-  vi.mocked(Commands.prototype.lark).mockImplementation(async args => { if (args.includes('+messages-mget') && args.includes('om_1')) await gate.promise; return lark })
+  // The first candidate's card is slow to reach the main Session.
+  let held = false
+  const prompt = h.runtime.sessions.prompt.bind(h.runtime.sessions)
+  vi.spyOn(h.runtime.sessions, 'prompt').mockImplementation(async (...args) => {
+    if (args[2].includes(a1.id)) { held = true; await gate.promise }
+    return prompt(...args)
+  })
   await h.runtime.settings.pause(true, 'panel')
-  const a1 = feishu('1', '@bot 修 A'), b1 = feishu('2', '@bot 修 B'), b2 = feishu('3', '@bot B 还有这个', { root_id: 'om_2' })
+  const a1 = chat('1', '@bot 修 A'), b1 = chat('2', '@bot 修 B'), b2 = chat('3', '@bot B 还有这个', { root_id: 'om_2' })
   h.runtime.receive(a1); h.runtime.receive(b1)
   await h.runtime.settings.pause(false, 'panel')
-  await waitUntil(() => linkLookedUp('om_1'))
+  await waitUntil(() => held)
   h.runtime.receive(b2)
   gate.resolve(); await h.runtime.idle()
-  const threadB = `feishu:${CHAT}:om_2`
+  const threadB = `chat:${CHAT}:om_2`
   expect(h.runtime.store.threads.get(threadB)).toMatchObject({ evaluating: { triggerIds: [b1.id] }, pending: [b2.id] })
   await h.route({ kind: 'ignore', trigger_id: b1.id, reason: 'duplicate' })
   await h.runtime.idle()
   expect(h.runtime.store.threads.get(threadB)).toMatchObject({ evaluating: { triggerIds: [b2.id] }, pending: [] })
-  // A slow link lookup holds only its own candidate's card.
+  // A slow delivery holds only its own candidate's card.
   expect(h.candidates()).toEqual([b1.id, a1.id, b2.id])
 })
 
 it('delivers nothing to a ticket a person stopped while an earlier ticket\'s delivery waited', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-  const two = await h.acceptedTicket(feishu('5', '@bot 修二'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
+  const two = await h.acceptedTicket(chat('5', '@bot 修二'))
   await h.runtime.settings.pause(true, 'panel')
-  h.runtime.receive(feishu('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
-  h.runtime.receive(feishu('6', '二的补充', { mentions: [], root_id: 'om_5', sender_id: 'ou_guest' }))
+  h.runtime.receive(chat('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
+  h.runtime.receive(chat('6', '二的补充', { mentions: [], root_id: 'om_5', sender_id: 'ou_guest' }))
   // Tickets are processed newest-first, so holding ticket two pauses the pass before ticket one is delivered.
   const gate = deferred()
   const held = holdSession(two.sessionId, gate.promise)
@@ -67,9 +68,9 @@ it('delivers nothing to a ticket a person stopped while an earlier ticket\'s del
 })
 
 it('drops a delivery whose ticket a person stopped while it waited for the worker Session', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   await h.runtime.settings.pause(true, 'panel')
-  h.runtime.receive(feishu('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
+  h.runtime.receive(chat('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' }))
   const gate = deferred()
   const held = holdSession(one.sessionId, gate.promise)
   const resumed = h.runtime.settings.pause(false, 'panel')
@@ -87,7 +88,7 @@ it('runs prepare commands in the background, side by side, while accepts, intake
   const prepare = deferred()
   h.hooks.prepare = prepare.promise
   const prepares = () => h.subprocess.spawn.mock.calls.filter(([spec]) => spec.argv[0] === 'sh').length
-  const first = [feishu('1', '@bot 修一'), feishu('2', '@bot 修二')]
+  const first = [chat('1', '@bot 修一'), chat('2', '@bot 修二')]
   for (const trigger of first) h.runtime.receive(trigger)
   await h.runtime.idle()
   for (const [index, trigger] of first.entries()) {
@@ -96,7 +97,7 @@ it('runs prepare commands in the background, side by side, while accepts, intake
   }
   await waitUntil(() => prepares() === 2)
   // A Source loop's next message is stored at once, and a pass relays it while both prepare commands still run.
-  const later = feishu('3', '@bot 修三')
+  const later = chat('3', '@bot 修三')
   expect(h.runtime.receive(later)).toBe('stored')
   await h.runtime.pump()
   expect(h.candidates()).toEqual([...first, later].map(trigger => trigger.id))
@@ -110,7 +111,7 @@ it('keeps a launch that a pause cut short queued, and finishes it once processin
   h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, prepare: 'make worktree' } })
   const prepare = deferred()
   h.hooks.prepare = prepare.promise
-  const trigger = feishu('1', '@bot 修一')
+  const trigger = chat('1', '@bot 修一')
   h.runtime.receive(trigger); await h.runtime.idle()
   await h.route({ kind: 'accept', trigger_id: trigger.id, title: 'fix', worktree_name: 'fix-one', acknowledgement: '收到。' })
   await waitUntil(() => h.subprocess.spawn.mock.calls.some(([spec]) => spec.argv[0] === 'sh'))
@@ -124,13 +125,13 @@ it('keeps a launch that a pause cut short queued, and finishes it once processin
   expect(h.runtime.store.tickets.get(ticket!.id)!.assignments).toEqual([expect.objectContaining({ state: 'running' })])
 })
 
-const botMessage = () => feishu('2', 'CI 失败', { mentions: [], root_id: 'om_1', sender_id: 'cli_ci', sender_type: 'bot' })
+const botMessage = () => chat('2', 'CI 失败', { mentions: [], root_id: 'om_1', sender_id: 'cli_ci', sender_type: 'bot' })
 it('wakes an idle worker for a bot\'s Input only when a worker slot is free, and creates a worker Session someone deleted again', async () => {
   const settings = h.runtime.store.settings()
   h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, maxWorkers: 1 } })
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   h.agents.get(one.sessionId)!.status = 'idle'
-  const two = await h.acceptedTicket(feishu('5', '@bot 修二'))
+  const two = await h.acceptedTicket(chat('5', '@bot 修二'))
   expect(h.agents.get(two.sessionId)!.status).toBe('running')
   h.runtime.receive(botMessage()); await h.runtime.idle()
   // Ticket two's worker takes the only slot, so ticket one's Input waits.
@@ -146,11 +147,11 @@ it('wakes an idle worker for a bot\'s Input only when a worker slot is free, and
 it('wakes an idle worker for a person\'s message at once, in the slot kept beyond the limit', async () => {
   const settings = h.runtime.store.settings()
   h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, maxWorkers: 1 } })
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   h.agents.get(one.sessionId)!.status = 'idle'
-  const two = await h.acceptedTicket(feishu('5', '@bot 修二'))
+  const two = await h.acceptedTicket(chat('5', '@bot 修二'))
   expect(h.agents.get(two.sessionId)!.status).toBe('running')
-  h.runtime.receive(feishu('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' })); await h.runtime.idle()
+  h.runtime.receive(chat('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' })); await h.runtime.idle()
   expect(h.runtime.store.tickets.get(one.ticket.id)!.undelivered).toEqual([])
   expect(h.agents.get(one.sessionId)!.status).toBe('running')
 })
@@ -158,13 +159,13 @@ it('wakes an idle worker for a person\'s message at once, in the slot kept beyon
 it('counts a launch under way against maxWorkers, so a bot\'s Input for an idle worker waits for the slot', async () => {
   const settings = h.runtime.store.settings()
   h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, maxWorkers: 1, prepare: 'make worktree' } })
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   h.agents.get(one.sessionId)!.status = 'idle'
   // Ticket two's launch holds the only slot while its prepare command runs, before its worker's Session does.
   const prepare = deferred()
   h.hooks.prepare = prepare.promise
-  h.runtime.receive(feishu('5', '@bot 修二')); await h.runtime.idle()
-  await h.route({ kind: 'accept', trigger_id: feishu('5', '').id, title: 'two', worktree_name: 'fix-two', acknowledgement: '收到。' })
+  h.runtime.receive(chat('5', '@bot 修二')); await h.runtime.idle()
+  await h.route({ kind: 'accept', trigger_id: chat('5', '').id, title: 'two', worktree_name: 'fix-two', acknowledgement: '收到。' })
   await waitUntil(() => h.subprocess.spawn.mock.calls.filter(([spec]) => spec.argv[0] === 'sh').length === 2)
   h.runtime.receive(botMessage()); await h.runtime.pump()
   expect(h.runtime.store.tickets.get(one.ticket.id)!.undelivered).toHaveLength(1)
@@ -177,19 +178,19 @@ it('counts a launch under way against maxWorkers, so a bot\'s Input for an idle 
 })
 
 it('records on the ticket that its worker Session could not be created again', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   h.agents.get(one.sessionId)!.status = 'idle'
   h.agents.delete(one.sessionId)
   h.controller.resolveAgent.mockImplementation(async (id: string) => {
     if (id === one.sessionId) throw new Error('The Session store is offline')
     return h.resolveDefault(id)
   })
-  h.runtime.receive(feishu('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' })); await h.runtime.idle()
+  h.runtime.receive(chat('2', '一的补充', { mentions: [], root_id: 'om_1', sender_id: 'ou_guest' })); await h.runtime.idle()
   expect(h.runtime.store.tickets.get(one.ticket.id)).toMatchObject({ delivery: { error: expect.stringContaining('The Session store is offline') } })
 })
 
 it('lets a worker go on after a passing provider failure, three times, before its ticket fails', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
   const fail = (error: unknown) => { h.ctx.emit('agent/error', { agent: h.agents.get(one.sessionId), turn: 1, step: 1, error } as never) }
   const busy = Object.assign(new Error('Service Unavailable'), { status: 503 })
@@ -212,7 +213,7 @@ describe('a worker that goes on after a passing failure', () => {
   const told = (sessionId: string) => h.deliveries.mock.calls.map(([call]) => call)
     .filter(call => call.sessionId === sessionId && call.text.includes('Your last turn failed for a passing reason'))
   it('starts the count of passing failures again once its turn ends as turns do', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     const fail = () => { h.ctx.emit('agent/error', { agent, turn: 1, step: 1, error: busy() } as never) }
@@ -228,7 +229,7 @@ describe('a worker that goes on after a passing failure', () => {
     expect(latestAssignment(ticket())?.report?.state).toBe('waiting')
   })
   it('waits while processing is paused, and goes on once it resumes', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
     agent.status = 'idle'
     await h.runtime.settings.pause(true, 'panel')
@@ -243,7 +244,7 @@ describe('a worker that goes on after a passing failure', () => {
     expect(told(one.sessionId)).toHaveLength(1)
   })
   it('drops its timer when the host stops within the backoff', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       h.ctx.emit('agent/error', { agent: h.agents.get(one.sessionId), turn: 1, step: 1, error: busy() } as never)
@@ -264,13 +265,13 @@ describe('a worker whose work runs in the background', () => {
   it('stays busy while its shell job runs, holding its slot, and reports waiting once the job ended and its turn ends', async () => {
     const settings = h.runtime.store.settings()
     h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, maxWorkers: 1 } })
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     const job = h.jobs.run(one.sessionId)
     idle(one.sessionId); await h.runtime.idle()
     // No waiting report and nothing relayed while the job runs; the next ticket waits for the slot the job holds.
     expect(latestAssignment(ticket())?.report).toBeUndefined()
-    const two = await h.acceptedTicket(feishu('5', '@bot 修二'))
+    const two = await h.acceptedTicket(chat('5', '@bot 修二'))
     expect(latestAssignment(h.runtime.store.tickets.get(two.ticket.id)!)).toMatchObject({ state: 'pending' })
     // The job ends, which wakes the worker with its result; its turn ends, and it reports waiting.
     h.jobs.end(job)
@@ -279,7 +280,7 @@ describe('a worker whose work runs in the background', () => {
     await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))
   })
   it('stays busy while a subagent of it works, and reports waiting once the turn its end woke it for ends', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     const child = h.subagents.spawn(one.sessionId)
     idle(one.sessionId); await h.runtime.idle()
@@ -290,7 +291,7 @@ describe('a worker whose work runs in the background', () => {
     await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))
   })
   it('kills its shell jobs and releases its subagents when its ticket stops, whose ends wake no one, and lets it start new ones', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
     const job = h.jobs.run(one.sessionId), child = h.subagents.spawn(one.sessionId)
     h.runtime.engine.stopTicket(one.ticket.id)
@@ -305,7 +306,7 @@ describe('a worker whose work runs in the background', () => {
     expect(() => h.subagents.spawn(one.sessionId)).not.toThrow()
   })
   it('reports waiting for the Assignment that replaced one whose idle still waited for its subagents', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     // The first Assignment's turn ends while a subagent of it works.
     const child = h.subagents.spawn(one.sessionId)
@@ -325,7 +326,7 @@ describe('a worker whose work runs in the background', () => {
    * person, runs on, and its end wakes no one.
    */
   async function handsOff(report: Record<string, unknown>, before?: (ticketId: string) => void) {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     before?.(one.ticket.id)
     const job = h.jobs.run(one.sessionId, 'pnpm dev'), child = h.subagents.spawn(one.sessionId)
     await h.runTool(one.sessionId, 'orchestrator_report', report); await h.runtime.idle()
@@ -355,14 +356,14 @@ describe('a worker whose work runs in the background', () => {
   it('keeps a failed worker from being woken by a job it left, and from failing again', async () => {
     await handsOff({ state: 'failed', summary: 'The build broke.' })
   })
-  it('frees the slot of a worker that reports ready on a ticket that follows its pull request', async () => {
-    await handsOff({ state: 'ready', summary: 'PR ready' }, ticketId => { h.runtime.engine.bindThread(ticketId, { source: 'github', id: '7' }, true) })
+  it('frees the slot of a worker that reports ready on a ticket that follows its own Thread', async () => {
+    await handsOff({ state: 'ready', summary: 'Branch ready' }, ticketId => { h.runtime.engine.bindThread(ticketId, { source: 'plan', id: 'docs/plans/seven.md' }, true) })
   })
   it('frees the slot of a worker that asks a person a question with a progress report', async () => {
     await handsOff({ state: 'progress', summary: 'The server runs.', human_action: 'Does the button look right?' })
   })
   it('leaves the background work of a turn a person started in the worker\'s Session after a hand-off to that turn', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
     await h.runTool(one.sessionId, 'orchestrator_report', { state: 'blocked', summary: 'Which color?' }); await h.runtime.idle()
     // A person answers in the worker's Session, which the ticket does not record; the turn starts a subagent and a job.
@@ -379,7 +380,7 @@ describe('a worker whose work runs in the background', () => {
     expect(agent.status).toBe('running')
   })
   it('leaves the jobs a worker left to a person out of a later turn\'s background work, and does not kill them at the limit', async () => {
-    const one = await handsOff({ state: 'ready', summary: 'PR ready' }, ticketId => { h.runtime.engine.bindThread(ticketId, { source: 'github', id: '7' }, true) })
+    const one = await handsOff({ state: 'ready', summary: 'Branch ready' }, ticketId => { h.runtime.engine.bindThread(ticketId, { source: 'plan', id: 'docs/plans/seven.md' }, true) })
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     // A second server, left too; then a note from the orchestrator wakes the worker, whose turn ends without a report.
     const server = h.jobs.run(one.sessionId, 'pnpm preview')
@@ -387,7 +388,7 @@ describe('a worker whose work runs in the background', () => {
     idle(one.sessionId); await h.runtime.idle()
     await vi.waitFor(() => expect(h.jobs.service.wait).toHaveBeenCalledWith(server, expect.any(Number), one.sessionId, expect.anything()))
     await new Promise(resolve => setTimeout(resolve, 5))
-    h.runtime.engine.note(one.ticket.id, 'CI passed on the pull request.'); await h.runtime.idle()
+    h.runtime.engine.note(one.ticket.id, 'The checks passed on the branch.'); await h.runtime.idle()
     await vi.waitFor(() => expect(h.agents.get(one.sessionId)!.status).toBe('running'))
     idle(one.sessionId)
     await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))
@@ -395,16 +396,16 @@ describe('a worker whose work runs in the background', () => {
     expect(h.runtime.executor.activeCount()).toBe(0)
   })
   it('records each end of a worker\'s turn on its Assignment, also after its ready report', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-    h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
+    h.runtime.engine.bindThread(one.ticket.id, { source: 'plan', id: 'docs/plans/seven.md' }, true)
+    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'Branch ready' }); await h.runtime.idle()
     const report = latestAssignment(h.runtime.store.tickets.get(one.ticket.id)!)!.report!
     await new Promise(resolve => setTimeout(resolve, 5))
     idle(one.sessionId); await h.runtime.idle()
     await vi.waitFor(() => expect(latestAssignment(h.runtime.store.tickets.get(one.ticket.id)!)!.idleAt! > report.at).toBe(true))
   })
   it('shows no turn end on a running Assignment whose worker works again, whatever turn ends were recorded', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     idle(one.sessionId)
     await vi.waitFor(() => expect(latestAssignment(h.runtime.store.tickets.get(one.ticket.id)!)?.report?.state).toBe('waiting'))
     await h.runTool(one.sessionId, 'orchestrator_report', { state: 'progress', summary: 'On it again' })
@@ -412,34 +413,34 @@ describe('a worker whose work runs in the background', () => {
     expect((page.body as { assignments: Record<string, unknown>[] }).assignments[0]).not.toHaveProperty('turnEndedAt')
   })
   it('keeps a ticket open at a merge while its worker does in the background a message it acknowledged', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
-    h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    h.runtime.engine.bindThread(one.ticket.id, { source: 'plan', id: 'docs/plans/seven.md' }, true)
+    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'Branch ready' }); await h.runtime.idle()
     idle(one.sessionId); await h.runtime.idle()
     // A person asks for more; the worker acknowledges it, starts the work in the background and its turn ends.
     await new Promise(resolve => setTimeout(resolve, 5))
-    const more = feishu('2', '再加个测试', { mentions: [], root_id: 'om_1' })
+    const more = chat('2', '再加个测试', { mentions: [], root_id: 'om_1' })
     h.runtime.receive(more); await h.runtime.idle()
     await vi.waitFor(() => expect(ticket().undelivered).toEqual([]))
     await h.runTool(one.sessionId, 'orchestrator_ack', { trigger_id: more.id, text: '收到' })
     h.jobs.run(one.sessionId)
     idle(one.sessionId); await h.runtime.idle()
-    h.runtime.engine.threadClosed({ source: 'github', id: '7' }, 'merged', new Date().toISOString())
+    h.runtime.engine.threadClosed({ source: 'plan', id: 'docs/plans/seven.md' }, 'merged', new Date().toISOString())
     expect(ticket().ended).toBeUndefined()
     expect(h.jobs.service.kill).not.toHaveBeenCalled()
   })
   it('keeps a worker busy with what it started after a message reached its ready ticket', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
-    // The ticket follows its pull request, so a ready report leaves it open.
-    h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'PR ready' })
+    // The ticket follows its own Thread, so a ready report leaves it open.
+    h.runtime.engine.bindThread(one.ticket.id, { source: 'plan', id: 'docs/plans/seven.md' }, true)
+    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'Branch ready' })
     idle(one.sessionId); await h.runtime.idle()
     expect(h.runtime.executor.activeCount()).toBe(0)
     // A person asks for more; the worker starts the tests in the background and ends its turn.
     await new Promise(resolve => setTimeout(resolve, 5))
-    h.runtime.receive(feishu('2', '再加个测试', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
+    h.runtime.receive(chat('2', '再加个测试', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
     await vi.waitFor(() => expect(latestAssignment(ticket())?.deliveredAt! >= latestAssignment(ticket())!.report!.at).toBe(true))
     const job = h.jobs.run(one.sessionId)
     idle(one.sessionId); await h.runtime.idle()
@@ -450,7 +451,7 @@ describe('a worker whose work runs in the background', () => {
     await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))
   })
   it('gives each idle of a worker its own 30 minutes, not counting the turns that ends of its background work wake it for', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     const first = h.jobs.run(one.sessionId)
     let second = ''
@@ -473,7 +474,7 @@ describe('a worker whose work runs in the background', () => {
     expect(latestAssignment(ticket())?.report?.state).toBe('waiting')
   })
   it('kills the jobs that run 30 minutes after the turn ended, leaving its subagents, and reports waiting after the worker\'s words', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     said(one.sessionId, 'The tests run in the background.')
     const job = h.jobs.run(one.sessionId, 'pnpm test\n  --watch=false'), child = h.subagents.spawn(one.sessionId)
@@ -495,7 +496,7 @@ describe('a worker whose work runs in the background', () => {
     expect(h.relays(h.runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_report', state: 'waiting' })
   })
   it('says a worker\'s subagents still run when only they ran 30 minutes after the turn ended', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     h.subagents.spawn(one.sessionId)
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try { idle(one.sessionId); await minutes(30) } finally { vi.useRealTimers() }
@@ -503,17 +504,17 @@ describe('a worker whose work runs in the background', () => {
       summary: 'Subagents still ran 30 minutes after the worker\'s turn ended.' }))
   })
   it('holds a delivery that reached a worker while a hand-off stopped its subagents until the stop ended', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
-    h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
+    h.runtime.engine.bindThread(one.ticket.id, { source: 'plan', id: 'docs/plans/seven.md' }, true)
     h.subagents.spawn(one.sessionId)
-    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'Branch ready' }); await h.runtime.idle()
     // A person's message is on its way into the worker's Session, held there, as the worker hands off; the release is slow.
     const session = deferred(), drain = deferred(), release = h.subagents.service.drainChildren.getMockImplementation()!
     h.subagents.service.drainChildren.mockImplementationOnce(async (parent, ids) => { await drain.promise; await release(parent, ids) })
     await new Promise(resolve => setTimeout(resolve, 5))
     const held = holdSession(one.sessionId, session.promise)
-    h.runtime.receive(feishu('2', '按钮再大一点', { mentions: [], root_id: 'om_1' }))
+    h.runtime.receive(chat('2', '按钮再大一点', { mentions: [], root_id: 'om_1' }))
     await vi.waitFor(() => expect(held()).toBe(true))
     idle(one.sessionId)
     await vi.waitFor(() => expect(h.subagents.service.drainChildren).toHaveBeenCalled())
@@ -527,7 +528,7 @@ describe('a worker whose work runs in the background', () => {
     expect(h.deliveries.mock.invocationCallOrder[delivered]).toBeGreaterThan(agent.cancel.mock.invocationCallOrder.at(-1)!)
   })
   it('keeps an Input a restart found handed over to a settled worker, and delivers a waiting one once its subagents stopped', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!, ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
     idle(one.sessionId)
     await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))
@@ -571,14 +572,14 @@ describe('a worker whose work runs in the background', () => {
     expect(agent.status).toBe('idle')
   })
   it('stops every worker\'s jobs and subagents when dsh-superagent stops, before it releases their tool limits', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const job = h.jobs.run(one.sessionId), child = h.subagents.spawn(one.sessionId)
     await h.stop()
     expect(h.jobs.service.kill).toHaveBeenCalledWith(job, one.sessionId, expect.any(String))
     expect(h.subagents.live(child)).toBe(false)
   })
   it('cancels no worker for a subagent that ended before, and cancels the turn a release woke also when the release fails', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const agent = h.agents.get(one.sessionId)!
     h.subagents.settle(h.subagents.spawn(one.sessionId))
     // Its ready report ends the ticket, and it ends its own turn.
@@ -586,7 +587,7 @@ describe('a worker whose work runs in the background', () => {
     await h.runtime.idle(); await new Promise(resolve => setTimeout(resolve, 10))
     expect(agent.cancel).not.toHaveBeenCalled()
     // A release that fails after the ends woke the worker still cancels that turn.
-    const two = await h.acceptedTicket(feishu('5', '@bot 修二'))
+    const two = await h.acceptedTicket(chat('5', '@bot 修二'))
     const other = h.agents.get(two.sessionId)!
     const child = h.subagents.spawn(two.sessionId)
     h.subagents.service.drainChildren.mockImplementationOnce(async () => { h.subagents.settle(child); throw new Error('ACTIVATION_TEARDOWN_FAILED') })
@@ -595,7 +596,7 @@ describe('a worker whose work runs in the background', () => {
     await vi.waitFor(() => expect(other.cancel.mock.invocationCallOrder.at(-1)).toBeGreaterThan(h.subagents.service.drainChildren.mock.invocationCallOrder.at(-1)!))
   })
   it('stops the jobs and the turn of a worker a restart in this process left running, before its Assignment starts again', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const job = h.jobs.run(one.sessionId)
     h.runtime.executor.resume()
     expect(h.agents.get(one.sessionId)!.cancel).toHaveBeenCalledWith({ kind: 'user' }, { keepInbox: true })
@@ -605,8 +606,8 @@ describe('a worker whose work runs in the background', () => {
   it('stops a ticket whose worker Session was never created without a health error, and goes on past a failing kill', async () => {
     const settings = h.runtime.store.settings()
     h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, maxWorkers: 1 } })
-    await h.acceptedTicket(feishu('1', '@bot 修一'))
-    const queued = await h.acceptedTicket(feishu('5', '@bot 修二'))
+    await h.acceptedTicket(chat('1', '@bot 修一'))
+    const queued = await h.acceptedTicket(chat('5', '@bot 修二'))
     expect(h.agents.has(queued.sessionId)).toBe(false)
     // DSH cannot list the children of a Session that does not exist.
     const list = h.subagents.service.listChildren.getMockImplementation()!
@@ -631,11 +632,11 @@ describe('what a worker read', () => {
   const later = () => new Promise(resolve => setTimeout(resolve, 5))
   /** A ticket its worker completed, and a person's thanks on its thread, which resumes it once received. */
   async function completed() {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'Done' }); await h.runtime.idle()
     idle(one.sessionId)
     await later()
-    return { one, thanks: feishu('2', '@bot 谢谢', { root_id: 'om_1' }), ticket: () => h.runtime.store.tickets.get(one.ticket.id)! }
+    return { one, thanks: chat('2', '@bot 谢谢', { root_id: 'om_1' }), ticket: () => h.runtime.store.tickets.get(one.ticket.id)! }
   }
   /** Deliveries to a Session of a message with `text` fail until the returned function lets them through. */
   function failing(sessionId: string, text: string) {
@@ -668,8 +669,8 @@ describe('what a worker read', () => {
     expect(h.candidates()).toContain(thanks.id)
   })
   it('counts a delivered message as read only once its step took it into the Session, not when a cut-off step claimed it', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-    const more = feishu('2', '再改一下', { mentions: [], root_id: 'om_1' })
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
+    const more = chat('2', '再改一下', { mentions: [], root_id: 'om_1' })
     h.runtime.receive(more); await h.runtime.idle()
     const input = () => h.runtime.store.tickets.get(one.ticket.id)!.inputs.find(item => item.kind === 'trigger' && item.triggerId === more.id) as
       { readAt?: string | null }
@@ -679,7 +680,7 @@ describe('what a worker read', () => {
     expect(input().readAt).toBe(null)
   })
   it('keeps a note waiting in a worker\'s Session across an in-process restart, for the next Assignment\'s first step', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     h.runtime.engine.note(one.ticket.id, 'Ticket B changes the same page.'); await h.runtime.idle()
     const copies = () => h.deliveries.mock.calls.filter(([call]) => call.sessionId === one.sessionId && call.text.includes('Ticket B changes the same page.'))
     await vi.waitFor(() => expect(copies()).toHaveLength(1))
@@ -691,8 +692,8 @@ describe('what a worker read', () => {
     expect(copies()).toHaveLength(1)
   })
   it('delivers once a message a crash left waiting in a worker\'s Session, which the restart puts back for the next Assignment', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-    h.runtime.receive(feishu('2', '再改一下', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
+    h.runtime.receive(chat('2', '再改一下', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
     const copies = () => h.deliveries.mock.calls.filter(([call]) => call.sessionId === one.sessionId && call.text.includes('再改一下'))
     await vi.waitFor(() => expect(copies()).toHaveLength(1))
     // The process dies: the worker's agent is not loaded when the restart runs, and its inbox, which holds the message,
@@ -708,8 +709,8 @@ describe('what a worker read', () => {
     expect(waiting[0]).not.toContain(copies()[0]![0].id)
   })
   it('gives the Assignment an in-process restart starts a message a cut-off step had claimed, once', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
-    h.runtime.receive(feishu('2', '再改一下', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
+    h.runtime.receive(chat('2', '再改一下', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
     const sent = () => h.deliveries.mock.calls.filter(([call]) => call.sessionId === one.sessionId && call.text.includes('再改一下')).length
     await vi.waitFor(() => expect(sent()).toBe(1))
     // A step claims it and the restart cuts the step off before the Session took it, which drops it.
@@ -745,25 +746,25 @@ describe('what a worker read', () => {
     expect(h.candidates()).not.toContain(thanks.id)
   })
   it('sends to Eval at a merge a message that reached the worker after its last step, which no step took before its turn ended', async () => {
-    const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+    const one = await h.acceptedTicket(chat('1', '@bot 修一'))
     const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
-    h.runtime.engine.bindThread(one.ticket.id, { source: 'github', id: '7' }, true)
-    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'PR ready' }); await h.runtime.idle()
+    h.runtime.engine.bindThread(one.ticket.id, { source: 'plan', id: 'docs/plans/seven.md' }, true)
+    await h.runTool(one.sessionId, 'orchestrator_report', { state: 'ready', summary: 'Branch ready' }); await h.runtime.idle()
     // A person's thanks reaches the worker after the step of its report, and its turn ends with no step taking it.
     await later()
-    const thanks = feishu('2', '@bot 谢谢', { root_id: 'om_1' })
+    const thanks = chat('2', '@bot 谢谢', { root_id: 'om_1' })
     h.runtime.receive(thanks); await h.runtime.idle()
     idle(one.sessionId)
     await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))
     await later()
-    h.runtime.engine.threadClosed({ source: 'github', id: '7' }, 'merged', new Date().toISOString())
+    h.runtime.engine.threadClosed({ source: 'plan', id: 'docs/plans/seven.md' }, 'merged', new Date().toISOString())
     await h.runtime.pump(); await h.runtime.idle()
     expect(ticket().ended).toMatchObject({ outcome: 'merged' })
     expect(h.candidates()).toContain(thanks.id)
   })
 })
 it('reports nothing for a worker whose turn ends while it waits out the backoff of a passing failure', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   const agent = h.agents.get(one.sessionId)!
   const relayed = h.relays(h.runtime.masterId).length
   h.ctx.emit('agent/error', { agent, turn: 1, step: 1, error: Object.assign(new Error('Service Unavailable'), { status: 503 }) } as never)
@@ -777,12 +778,12 @@ it('reports nothing for a worker whose turn ends while it waits out the backoff 
 it('wakes an idle worker for a status request in the slot kept for a person, while every other slot is taken', async () => {
   const settings = h.runtime.store.settings()
   h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, maxWorkers: 1 } })
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   // Its worker ended its turn without a report, so it waits.
   h.agents.get(one.sessionId)!.status = 'idle'
   h.ctx.emit('agent/status', { agent: h.agents.get(one.sessionId), status: 'idle' } as never)
   await vi.waitFor(() => expect(latestAssignment(h.runtime.store.tickets.get(one.ticket.id)!)?.report?.state).toBe('waiting'))
-  const two = await h.acceptedTicket(feishu('5', '@bot 修二'))
+  const two = await h.acceptedTicket(chat('5', '@bot 修二'))
   expect(h.agents.get(two.sessionId)!.status).toBe('running')
   expect(h.runtime.engine.requestStatus(one.ticket.id)).toBe(true); await h.runtime.idle()
   expect(h.runtime.store.tickets.get(one.ticket.id)!.undelivered).toEqual([])
@@ -798,11 +799,11 @@ it('tells a passing failure of the provider or the network from one that a later
   }
 })
 it('reports a worker waiting when its turn ends after a person answered its blocked report', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   await h.runTool(one.sessionId, 'orchestrator_report', { state: 'blocked', summary: 'Which color?' })
   // The person answers later than the report.
   await new Promise(resolve => setTimeout(resolve, 5))
-  h.runtime.receive(feishu('2', '蓝色', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
+  h.runtime.receive(chat('2', '蓝色', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
   const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
   expect(waitsForPerson(ticket())).toBe(false)
   h.agents.get(one.sessionId)!.status = 'idle'
@@ -816,14 +817,14 @@ it('resumes an ended ticket a person wrote to during a pause once it lifts, unde
     try { await h.runtime.pump(); await h.runtime.idle() } finally { vi.useRealTimers() }
   }
   const ended = async (id: string) => {
-    const { ticket, sessionId } = await h.acceptedTicket(feishu(id, `@bot 修${id}`, { root_id: `om_${id}` }))
+    const { ticket, sessionId } = await h.acceptedTicket(chat(id, `@bot 修${id}`, { root_id: `om_${id}` }))
     await h.runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Done.' })
     return ticket.id
   }
   const first = await ended('1'), second = await ended('3')
   const followUp = async (id: string, root: string) => {
     await h.runtime.settings.pause(true, 'panel')
-    h.runtime.receive(feishu(id, '再改一下', { mentions: [], root_id: root })); await h.runtime.idle()
+    h.runtime.receive(chat(id, '再改一下', { mentions: [], root_id: root })); await h.runtime.idle()
   }
   // While processing is paused, the message waits on the ended ticket; the first pass after the pause resumes it.
   await followUp('2', 'om_1')
@@ -834,13 +835,13 @@ it('resumes an ended ticket a person wrote to during a pause once it lifts, unde
   // A Mandate the Policy no longer holds when the pause lifts does not resume: its sender left the list meanwhile.
   await followUp('4', 'om_3')
   const settings = h.runtime.store.settings()
-  h.runtime.store.saveSettings({ ...settings, policy: { ...settings.policy, sources: { ...settings.policy.sources, feishu: { ...settings.policy.sources.feishu!, allowed: [] } } } })
+  h.runtime.store.saveSettings({ ...settings, policy: { ...settings.policy, sources: { ...settings.policy.sources, chat: { ...settings.policy.sources.chat!, allowed: [] } } } })
   await h.runtime.settings.pause(false, 'panel'); await pass()
   expect(h.runtime.store.tickets.get(second)).toMatchObject({ ended: expect.anything(), undelivered: [] })
 })
 
 it('ends a worker\'s turn only when the stop that ended its Assignment commits', async () => {
-  const one = await h.acceptedTicket(feishu('1', '@bot 修一'))
+  const one = await h.acceptedTicket(chat('1', '@bot 修一'))
   const worker = h.agents.get(one.sessionId)! as unknown as { cancel: ReturnType<typeof vi.fn> }
   expect(() => h.runtime.store.atomic(() => { h.runtime.engine.stopTicket(one.ticket.id); throw new Error('rolled back') })).toThrow('rolled back')
   expect(worker.cancel).not.toHaveBeenCalled()
@@ -884,7 +885,7 @@ describe('the Executor\'s parts', () => {
     const settings = SettingsSchema.parse({ policy: { rules: [{ id: 'copy', name: 'Copy fixes', enabled: true,
       instruction: 'Fix typos only.' }] } })
     const ticket = { id: 'ticket-0123456789abcdef', origin: { triggerId: 'tr1', triggerIds: [] },
-      mandate: { strength: 'inferred', policyVersion: 'v1', basis: { rules: ['copy'] }, actor: { source: 'github', id: 'alice' },
+      mandate: { strength: 'inferred', policyVersion: 'v1', basis: { rules: ['copy'] }, actor: { source: 'chat', id: 'alice' },
         scope: '' } } as unknown as Ticket
     const execution = ticketExecution(ticket, { kind: 'accept', title: 'Fix', scope: 'the typo', reason: 'r', name: 'fix-typo' } as never,
       settings, '/state')
@@ -902,25 +903,25 @@ describe('the Executor\'s parts', () => {
     expect(mandateInstructions({ strength: 'explicit' })).toBe('')
   })
   it('renders each kind of Input as its worker reads it, inline, and no reopen Input', () => {
-    const asked = { id: 'tr1', source: 'feishu', threads: [{ source: 'feishu', id: 'oc:om_1' }], actor: { source: 'feishu', id: 'ou_a' }, human: true,
+    const asked = { id: 'tr1', source: 'chat', threads: [{ source: 'chat', id: 'oc:om_1' }], actor: { source: 'chat', id: 'ou_a' }, human: true,
       at: '2026-09-01T00:00:00Z', text: 'Which page?', meta: {} } as Trigger
     const reply = { ...asked, id: 'tr2', text: 'The login page. '.repeat(50) }
     const card = triggerMessage(reply, { source_url: 'https://x' }, 'see the log', asked)
-    expect(card).toEqual({ trigger_id: 'tr2', from: 'ou_a', thread: 'feishu:oc:om_1', at: '2026-09-01T00:00:00Z', text: expect.stringMatching(/^The login page\./),
+    expect(card).toEqual({ trigger_id: 'tr2', from: 'ou_a', thread: 'chat:oc:om_1', at: '2026-09-01T00:00:00Z', text: expect.stringMatching(/^The login page\./),
       chars: reply.text.length, read: 'trigger/tr2', source_url: 'https://x', routing_note: 'see the log', replies_to: { trigger_id: 'tr1', preview: 'Which page?' } })
     expect(card.text).toHaveLength(601)
-    expect(triggerMessage(asked, {})).toEqual({ trigger_id: 'tr1', from: 'ou_a', thread: 'feishu:oc:om_1', at: asked.at, text: 'Which page?' })
+    expect(triggerMessage(asked, {})).toEqual({ trigger_id: 'tr1', from: 'ou_a', thread: 'chat:oc:om_1', at: asked.at, text: 'Which page?' })
     expect(JSON.parse(inputMessage({ id: 'i1', kind: 'trigger', triggerId: 'tr2', at: '' }, card)!)).toEqual(card)
     expect(JSON.parse(inputMessage({ id: 'i1', kind: 'trigger', triggerId: 'gone', at: '' })!)).toEqual({ trigger_id: 'gone', read: 'trigger/gone' })
     expect(inputMessage({ id: 'i2', kind: 'text', at: '', text: 'Please also update the docs' })).toBe('Please also update the docs')
     // A Policy change says what it means for the ticket, without version hashes.
     const changed = inputMessage({ id: 'i3', kind: 'policy-changed', at: '', from: 'v1', to: 'v2', effect: { requesterAllowed: false,
-      requester: { source: 'github', id: 'ci-bot' },
+      requester: { source: 'chat', id: 'ci-bot' },
       rules: [{ id: 'copy', name: 'Copy fixes', change: 'changed', instruction: 'Fix typos only.' }, { id: 'visual', name: 'Visual', change: 'disabled' }] } })!
     expect(changed).toContain('Rule Copy fixes (copy), which this ticket was accepted under, changed. Keep the remaining work within it as it reads now: Fix typos only.')
     expect(changed).toContain('Rule Visual (visual), which this ticket was accepted under, no longer applies')
     // The sender is named, a bot as a person.
-    expect(changed).toContain('The sender this ticket is for, ci-bot on github, may no longer start work here')
+    expect(changed).toContain('The sender this ticket is for, ci-bot on chat, may no longer start work here')
     expect(changed).not.toContain('person')
     expect(changed).not.toContain('v2')
     const mode = inputMessage({ id: 'i6', kind: 'policy-changed', at: '', from: 'v1', to: 'v2', effect: { proactive: false } })!

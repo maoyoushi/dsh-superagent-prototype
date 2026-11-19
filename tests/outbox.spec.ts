@@ -1,10 +1,10 @@
-/** Outbox delivery when processing is paused or a Source kind registers late. */
+/** Outbox delivery when processing is paused or a Source kind registers late, and the word limit of replies. */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { OutboundMessage } from '../src/core/index.ts'
-import { Commands } from '../src/infra/commands.ts'
 import type { SourceKind } from '../src/sources/kind.ts'
-import { feishu, startRuntime, type Host } from './fixtures/host.ts'
+import { IM_WORDS } from '../src/infra/text.ts'
+import { chat, chatChannel, startRuntime, type Host } from './fixtures/host.ts'
 
 let h: Host
 beforeEach(async () => { h = await startRuntime() })
@@ -15,16 +15,15 @@ async function at(ms: number) {
 }
 
 it('holds every message while processing is paused, and sends it once processing resumes', async () => {
-  const lark = vi.mocked(Commands.prototype.lark)
   await h.runtime.settings.pause(true, 'panel')
-  lark.mockClear()
-  h.runtime.outbox.send({ id: 'held', channel: feishu('1', 'x').channel!, text: '已合并。', kind: 'notice' })
+  chatChannel.reset()
+  h.runtime.outbox.send({ id: 'held', channel: chat('1', 'x').channel!, text: '已合并。', kind: 'notice' })
   await h.runtime.sendReplies()
-  expect([h.runtime.outbox.status('held'), lark.mock.calls.length]).toEqual(['pending', 0])
+  expect([h.runtime.outbox.status('held'), chatChannel.sent.length]).toEqual(['pending', 0])
   await h.runtime.settings.pause(false, 'panel')
   await h.runtime.pump(); await h.runtime.sendReplies()
   expect(h.runtime.outbox.status('held')).toBe('sent')
-  expect(JSON.stringify(lark.mock.calls)).toContain('已合并。')
+  expect(chatChannel.sent.map(message => [message.id, message.text])).toEqual([['held', '已合并。']])
 })
 
 it('keeps a message for a Source that is not installed waiting, and sends it once the Source\'s kind registers', async () => {
@@ -39,4 +38,13 @@ it('keeps a message for a Source that is not installed waiting, and sends it onc
   // A message whose Source was not installed is tried again after 5 seconds.
   await at(5000)
   expect([h.runtime.outbox.status('waiting'), sent.map(message => message.id)]).toEqual(['sent', ['waiting']])
+})
+
+it('refuses a reply longer than the message word limit on every Channel, and leaves no receipt of it', () => {
+  const words = (count: number) => Array.from({ length: count }, () => 'word').join(' ')
+  const channel = chat('1', 'x').channel!
+  expect(() => { h.runtime.outbox.send({ id: 'long', channel, text: words(IM_WORDS + 1), kind: 'reply' }) }).toThrow(`maximum is ${IM_WORDS}`)
+  expect(h.runtime.outbox.status('long')).toBeUndefined()
+  h.runtime.outbox.send({ id: 'short', channel, text: words(IM_WORDS), kind: 'reply' })
+  expect(h.runtime.outbox.status('short')).toBe('pending')
 })

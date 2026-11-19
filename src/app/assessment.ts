@@ -1,5 +1,7 @@
 /** Proactive candidate assessment for the main Session: relays candidate cards, serves bounded context reads, and records outcomes. */
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { join, sep } from 'node:path'
 import { z } from 'zod'
 import { reasonText, threadKey, type Assessor, type AssessmentOutcome, type Candidate, type EngineForMainSession,
   type Trigger } from '../core/index.ts'
@@ -8,7 +10,6 @@ import { checkedImText } from '../infra/text.ts'
 import type { Commands } from '../infra/commands.ts'
 import type { Deployment } from '../deployment.ts'
 import { admissionContext } from '../sources/admission-context.ts'
-import { readRepositoryPath } from '../sources/github-read.ts'
 import type { TriggerContext } from '../sources/kind.ts'
 import { relatedTickets } from './cards.ts'
 import { textPage } from './context.ts'
@@ -45,6 +46,29 @@ type ReadCache = {
 interface EvalReads { cache: ReadCache; context?: AssessmentContext; error?: string; loading?: Promise<void> }
 /** Message returned when assessing a Trigger whose Source provides no thread context. */
 const NO_CONTEXT = 'This Source gives no Thread context; assess the Trigger\'s own text and the batch.'
+/** The largest repository file an assessment reads whole, in bytes. */
+const MAX_FILE_BYTES = 2 * 1024 * 1024
+/** Entries an assessment never reads: hidden files and directories, and installed dependencies. */
+const hidden = (name: string): boolean => name.startsWith('.') || name === 'node_modules'
+/**
+ * Reads a file or lists a directory of the local checkout at `repository`. The path is relative to it; a hidden or
+ * `node_modules` part, `..`, or a symbolic link that resolves outside the checkout is refused.
+ */
+export async function readRepositoryPath(repository: string, path: string, kind: 'file' | 'directory'): Promise<string> {
+  const parts = path.split('/').filter(part => part && part !== '.')
+  if (parts.some(part => part === '..' || hidden(part))) throw new Error('Only non-hidden repository source paths are available')
+  const root = await realpath(repository)
+  const target = await realpath(join(root, ...parts)).catch(() => { throw new Error(`${path} does not exist in the repository`) })
+  if (target !== root && !target.startsWith(root + sep)) throw new Error('Only paths inside the repository are available')
+  const info = await stat(target)
+  if (kind === 'directory') {
+    if (!info.isDirectory()) throw new Error(`${path} is not a directory`)
+    return (await readdir(target)).filter(name => !hidden(name)).sort().join('\n')
+  }
+  if (!info.isFile()) throw new Error(`${path} is not a file`)
+  if (info.size > MAX_FILE_BYTES) throw new Error(`${path} is larger than ${MAX_FILE_BYTES} bytes`)
+  return readFile(target, 'utf8')
+}
 /** Host dependencies used by `MasterAssessor`. */
 export interface AssessorHost {
   /** Active evaluations in `Engine` that the assessor reads and decides. */
@@ -263,7 +287,7 @@ export class MasterAssessor implements Assessor {
         body = JSON.stringify({ images: references, next_read: next, ...result.body })
       }
       else {
-        body = await readRepositoryPath(commands, read.path!, read.resource === 'directory' ? 'directory' : 'file')
+        body = await readRepositoryPath(this.host.deployment.repository, read.path!, read.resource === 'directory' ? 'directory' : 'file')
       }
       snapshots.set(cacheKey, body)
       return textPage(read.resource, body, read.offset, 4000)

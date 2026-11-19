@@ -44,17 +44,17 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
   prepare.setSelectionRange(17, 17)
   await click('可用的环境变量 3')
   expect(all('.dt-table tbody tr').map(row => row.textContent)).toEqual(['DSH_SUPERAGENT_DIR工单的执行目录执行器', 'DSH_SUPERAGENT_NAME工单短名执行器',
-    'DSH_SUPERAGENT_GITHUB_REPOSITORY仓库GitHub · 已关闭'])
+    'DSH_SUPERAGENT_REPOSITORY仓库计划文件 · 已关闭'])
   await click('DSH_SUPERAGENT_DIR')
   expect(field<HTMLTextAreaElement>(zh.prepareCommand).value).toBe('git worktree add "$DSH_SUPERAGENT_DIR"')
-  await type(field<HTMLInputElement>(zh.blockedCommands), 'gh-personal  gh.other')
+  await type(field<HTMLInputElement>(zh.blockedCommands), 'personal-cli  other.cli')
   const [workerProvider, workerModel, effort] = all('.dt-model input')
   await type(workerProvider as HTMLInputElement, 'worker-provider'); await type(workerModel as HTMLInputElement,
     'worker-model'); await type(effort as HTMLInputElement, 'high')
   expect([...document.querySelectorAll('#dt-worker-model-efforts option')].map(option => option.getAttribute('value'))).toEqual(['high'])
   await click(zh.save)
   expect(server.settings.executor).toEqual({ maxWorkers: 5, directory: '/srv/work',
-    prepare: 'git worktree add "$DSH_SUPERAGENT_DIR"', blockedCommands: ['gh-personal', 'gh.other'], model: { provider: 'worker-provider',
+    prepare: 'git worktree add "$DSH_SUPERAGENT_DIR"', blockedCommands: ['personal-cli', 'other.cli'], model: { provider: 'worker-provider',
       model: 'worker-model', reasoningEffort: 'high' } })
   expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/eval',
     'settings/executor'])
@@ -63,14 +63,14 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
 it('loads configuration history on demand with localized changes, Source field labels and notified Tickets', async () => {
   server.history = { current: 3, policyVersion: 'abcdef1234567890', items: [{ revision: 3, savedAt: '2026-09-22T00:00:00Z',
     source: 'sync', policyVersion: 'abcdef1234567890', policyChanged: true, notified: [{ id: 't1', title: '修复回归' }], block: 'policy',
-    changes: [{ code: 'mode', from: 'off', to: 'observe' }, { code: 'sourceRowsAdded', source: 'feishu', field: 'allowed', items: ['Bob'],
-      part: true }, { code: 'sourceField', source: 'feishu', field: 'syncChat', from: '', to: 'oc_team', part: true }] }] }
+    changes: [{ code: 'mode', from: 'off', to: 'observe' }, { code: 'sourceRowsAdded', source: 'chat', field: 'allowed', items: ['Bob'],
+      part: true }, { code: 'sourceField', source: 'chat', field: 'syncChat', from: '', to: 'oc_team', part: true }] }] }
   await mount()
   await click(zh['tab.eval'])
   await click(find(zh['tab.settings'], '.dt-status-head button'))
   expect(server.requests.some(request => request.path === 'policy/history')).toBe(false)
   await click(zh.configHistory)
-  for (const expected of ['第 3 次保存 · 从群同步', '生成策略版本 abcdef12', '接单模式：关闭 → 仅观察', '飞书 · 能发起工作的飞书用户 新增：Bob', '飞书 · 同步来源群：未设置 → oc_team',
+  for (const expected of ['第 3 次保存 · 从群同步', '生成策略版本 abcdef12', '接单模式：关闭 → 仅观察', '聊天 · 能发起工作的人 新增：Bob', '聊天 · 同步来源群：未设置 → oc_team',
     '因策略变更通知了 1 个进行中的工单：修复回归']) expect(text()).toContain(expected)
 })
 
@@ -101,11 +101,11 @@ it('shows save and discard only while a settings block has edits, at the end of 
   expect(document.activeElement).toBe(workers.form)
   await click(find(zh['term.source'], '.dt-settings-link'))
   expect(all('.dt-savebar')).toHaveLength(0)
-  const github = all('.dt-card').find(card => card.querySelector('.dt-card-title')?.textContent === 'GitHub')!
-  await type(field<HTMLInputElement>('智能体的 GitHub CLI'), 'gh-other')
-  expect(github.lastElementChild!.classList.contains('dt-savebar')).toBe(true)
-  // The agent CLI is read by setup, so the bar warns that saving restarts dsh-superagent and interrupts running work.
-  expect(github.lastElementChild!.textContent).toContain('2 个进行中的派工会中断')
+  const plan = all('.dt-card').find(card => card.querySelector('.dt-card-title')?.textContent === '计划文件')!
+  await type(field<HTMLInputElement>('仓库目录'), '/elsewhere')
+  expect(plan.lastElementChild!.classList.contains('dt-savebar')).toBe(true)
+  // The repository is read by setup, so the bar warns that saving restarts dsh-superagent and interrupts running work.
+  expect(plan.lastElementChild!.textContent).toContain('2 个进行中的派工会中断')
 })
 
 it('gives the focus back to the field that had it once a block\'s save ends', async () => {

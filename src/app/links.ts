@@ -1,42 +1,23 @@
 /** Source message link resolution and candidate card assembly for the main Session. */
 import type { Candidate, Ticket, Trigger } from '../core/index.ts'
-import type { Commands } from '../infra/commands.ts'
-import { readFeishuLink } from '../sources/feishu-read.ts'
-import { feishuRef, feishuSettings } from '../sources/feishu.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import { triggerMessage } from '../executor/dsh.ts'
 import { relatedTickets, ticketCard, triggerCard } from './cards.ts'
 import type { Store } from './store.ts'
-import type { TextCache } from './cache.ts'
+import type { ChannelLinks } from '../sources/kind.ts'
 
 export interface LinkHost {
   readonly store: Pick<Store, 'settings' | 'triggers' | 'threads' | 'tickets'>
-  readonly links: TextCache
-  readonly commands: Commands
   readonly sources: SourceRegistry
-  readonly lifetime: AbortSignal
+  /** Deployment facts channel links may use; empty while setup is pending. */
+  links(): ChannelLinks
 }
 
-/** Resolves and caches a trigger's external message URL, falling back to a readable resource path when lookup fails. */
-export async function sourceLink(host: LinkHost, trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }> {
+/** A trigger's own URL, or else the link its Source's channel gives for the trigger's conversation. */
+export async function sourceLink(host: Pick<LinkHost, 'sources' | 'links'>, trigger: Trigger): Promise<{ source_url?: string }> {
   if (trigger.url) return { source_url: trigger.url }
-  const ref = feishuRef(trigger)
-  if (!ref) return {}
-  const cacheKey = `${ref.chatId}:${ref.messageId}`
-  const cached = host.links.get(cacheKey)
-  if (cached) return { source_url: cached }
-  let url: string
-  try {
-    const timeout = AbortSignal.timeout(feishuSettings(host.sources).linkTimeoutMs)
-    url = await readFeishuLink(host.commands.withSignal(AbortSignal.any([signal ?? host.lifetime, timeout])), ref)
-  } catch {
-    host.lifetime.throwIfAborted()
-    signal?.throwIfAborted()
-    // Optional link enrichment may fail independently of the retained source message.
-    return { source_url_read: `feishu/${trigger.id}/message` }
-  }
-  host.links.set(cacheKey, url)
-  return { source_url: url }
+  const url = trigger.channel ? host.sources.link(trigger.channel, host.links()).url : ''
+  return url ? { source_url: url } : {}
 }
 
 export function repliedTo({ store, sources }: { store: Pick<Store, 'triggers'>; sources: Pick<SourceRegistry, 'repliesTo'> },
@@ -44,9 +25,9 @@ export function repliedTo({ store, sources }: { store: Pick<Store, 'triggers'>; 
   const parent = sources.repliesTo(trigger)
   return parent === undefined ? undefined : store.triggers.get(parent)
 }
-/** Finds tickets subscribed to threads referenced in `trigger.text` (such as `#12` or URLs) that are not already in `known`. */
+/** Finds tickets subscribed to threads referenced in `trigger.text` (such as plan file paths or URLs) that are not already in `known`. */
 function referencedTickets(host: LinkHost, trigger: Trigger, known: readonly Ticket[]): Ticket[] {
-  const threads = (trigger.text.match(/#\d+|https?:\/\/[^\s)>\]]+/g) ?? []).flatMap(reference => host.sources.find(reference).threads)
+  const threads = (trigger.text.match(/[\w./-]+\.md\b|https?:\/\/[^\s)>\]]+/g) ?? []).flatMap(reference => host.sources.find(reference).threads)
   const ids = new Set(threads.flatMap(thread => host.store.threads.get(thread)?.subscriptions ?? []))
   for (const ticket of known) ids.delete(ticket.id)
   return [...ids].flatMap(id => host.store.tickets.get(id) ?? []).slice(0, 4)

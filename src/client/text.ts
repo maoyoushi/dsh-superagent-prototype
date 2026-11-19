@@ -34,12 +34,9 @@ function label(t: T, reason: Reason): string {
 export const setupText = (t: T, problem: Pick<SetupProblem, 'code' | 'values'>): string => t(`setup.${problem.code}`, problem.values)
 export const healthText = (t: T, health: Pick<Health, 'detail' | 'code' | 'values'>): string =>
   health.code ? t(`healthCode.${health.code}` as const, health.values) : health.detail
-/** Replaces Feishu and GitHub content placeholders (images, cards, media, forwards, unresolved mentions) with localized labels. */
+/** Replaces Markdown image embeds with a localized label, so a preview reads as text. */
 export function readableMarkers(t: T, text: string): string {
-  return text.replace(/!\[[^\]]*\]\([^)]*\)|\[Image: [^\]]*\]|\[image\]/g, t('imageMarker'))
-    .replace(/\[Chat card: [^\]]*\]/g, t('cardMarker'))
-    .replace(/\[Media: [^\]]*\]/g, t('mediaMarker')).replace(/\[Merged forward\]/g, t('forwardMarker'))
-    .replace(/@_user_\d+/g, t('unknownMention'))
+  return text.replace(/!\[[^\]]*\]\([^)]*\)|\[image\]/g, t('imageMarker'))
 }
 const timeLocale = (lang: string) => lang === 'en' ? 'en' : 'zh-CN'
 export function when(value: string | undefined, lang: string): string {
