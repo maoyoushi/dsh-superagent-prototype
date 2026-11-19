@@ -1,5 +1,5 @@
 /** Serves paginated context resources to orchestrator_read so large bodies stay out of model prompts until requested. */
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { UserError, key, latestReport, reached, runningAssignment, threadKey, type Ticket, type Trigger } from '../core/index.ts'
 import { batchOf, inputMessage, triggerMessage, workerSessionId } from '../executor/dsh.ts'
 import { ASSIGNMENTS, INPUTS, assignmentLine, decisionCard, decisionDetails, inputLine, newestPage, preview, textPage, threadCard, ticketCard,
@@ -94,10 +94,21 @@ const trigger = (host: ResourceHost, id: string, ticketId?: string): Trigger => 
   return found
 }
 const THREAD_DECISIONS = 5
+/** Events read per persistence page when a transcript is loaded. */
+const TRANSCRIPT_PAGE = 512
 const triggerLine = (trigger: Trigger) => ({ trigger_id: trigger.id, actor: trigger.actor.id, human: trigger.human, at: trigger.at,
   preview: preview(trigger.text), chars: trigger.text.length, read: `trigger/${trigger.id}` })
-async function transcript(host: ResourceHost, ticketId: string) {
-  return (await host.context.sessionController.inspect(workerSessionId(ticketId) as SessionId)).events
+/** The worker Session's whole event log, read from persistence after a flush so the latest turn is included. */
+async function transcript(host: ResourceHost, ticketId: string): Promise<SessionEvent[]> {
+  const persistence = host.context.sessionPersistence
+  await persistence.flush()
+  await using handle = await persistence.open(workerSessionId(ticketId) as SessionId, 'read')
+  const events: SessionEvent[] = []
+  for (;;) {
+    const page = await handle.read(events.length, TRANSCRIPT_PAGE)
+    if (!page.events.length) return events
+    events.push(...page.events)
+  }
 }
 
 const ROUTES: readonly Route[] = [
