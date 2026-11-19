@@ -1,6 +1,6 @@
 /** Formats background notices and steering relays delivered to the main Session via the effect queue. */
 import { randomUUID } from 'node:crypto'
-import { followupOwners, key, liveTicket, type DomainEvent, type Ticket, type WorkerReport } from '../core/index.ts'
+import { followupOwners, key, latestAssignment, liveTicket, type DomainEvent, type Ticket, type WorkerReport } from '../core/index.ts'
 import { triggerMessage } from '../executor/dsh.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import { repliedTo } from './links.ts'
@@ -104,12 +104,18 @@ export function followupRelay(message: { trigger_id: string },
   return { id: `followup:${message.trigger_id}`, text: JSON.stringify({ kind: 'follow_up', ...message, delivered_to: tickets,
     note: FOLLOWUP_NOTE }) }
 }
-/** Formats a worker report relay for the main Session (truncating summaries over 600 characters behind `ticket/<id>/result`); `replyTo` names the human question trigger it answers. */
+/**
+ * Formats a worker report relay for the main Session (truncating summaries over 600 characters behind `ticket/<id>/result`);
+ * `replyTo` names the human question trigger it answers. An interrupted failure says whether the main Session may still retry
+ * it without a person (`auto_retry`: `available`, or `used` after an automatic retry was itself interrupted).
+ */
 export function resultRelay(ticket: Ticket, state: string, text: string, replyTo?: string): Relay {
   const id = key('worker-result', ticket.id, ticket.updatedAt, text)
   const summary = text.length > 600 ? { summary: text.slice(0, 600), chars: text.length } : { summary: text }
+  const latest = latestAssignment(ticket)
+  const interrupted = latest?.report?.interrupted ? { interrupted: true, auto_retry: latest.retried ? 'used' : 'available' } : {}
   const report = { kind: 'worker_report', ticket: brief(ticket), trigger_id: ticket.origin.triggerId, state, ...replyTo ? { answer_to: replyTo } : {},
-    ...summary, read: `ticket/${ticket.id}/result` }
+    ...interrupted, ...summary, read: `ticket/${ticket.id}/result` }
   return { id: `report:${id}`, text: JSON.stringify(report) }
 }
 /**

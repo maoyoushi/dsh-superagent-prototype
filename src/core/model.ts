@@ -222,7 +222,13 @@ export interface Assignment {
   startedAt?: string
   endedAt?: string
   endedReason?: string
-  report?: { state: ReportState; summary: string; at: string }
+  /**
+   * The latest report. `interrupted` marks the Executor's `failed` report after its worker's turn stopped on an error the
+   * worker could not get past, such as a model that kept answering empty, and no judgement of the worker's about the work.
+   */
+  report?: { state: ReportState; summary: string; at: string; interrupted?: true }
+  /** Started by an automatic retry of an interrupted Assignment, which the main Session may ask for once in a row. */
+  retried?: 'interrupted'
   /** When Inputs last reached the worker; one at or after `report.at` means the worker has been busy with Inputs since that report. */
   deliveredAt?: string
   /**

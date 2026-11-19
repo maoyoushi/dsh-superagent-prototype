@@ -160,10 +160,12 @@ export class Engine {
   stopTicket(ticketId: string, reason?: string): Ticket { return this.repo.atomic(() => this.tickets.stop(ticketId, reason)) }
   /**
    * A person retries a ticket whose worker reported failed or blocked (or whose input delivery failed): the stalled
-   * Assignment ends and a new one starts under the same Mandate.
-   * @throws UserError when the ticket is unknown, has ended, or is not retryable.
+   * Assignment ends and a new one starts under the same Mandate. With `cause` `interrupted`, the main Session retries without
+   * a person an Assignment the Executor reported interrupted, once in a row.
+   * @throws UserError when the ticket is unknown, has ended, or is not retryable; with `cause`, also when the latest Assignment
+   * was not interrupted (`notInterrupted`) or was itself an automatic retry (`retriedAlready`).
    */
-  retryTicket(ticketId: string): Ticket { return this.repo.atomic(() => this.tickets.retry(ticketId)) }
+  retryTicket(ticketId: string, cause?: 'interrupted'): Ticket { return this.repo.atomic(() => this.tickets.retry(ticketId, cause)) }
 
   // The Executor
 

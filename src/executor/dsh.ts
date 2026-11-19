@@ -41,11 +41,12 @@ const fromPerson = (input?: TicketInput): boolean => input?.kind === 'trigger' ?
  * DshExecutor catches it to mark the ticket failed immediately rather than retrying automatically, because an existing directory counts as prepared and an automatic retry would treat whatever a failed prepare command left behind in the directory as a prepared workspace.
  */
 class PrepareFailed extends Error {}
+// A model that answered empty (`EMPTY_RESPONSE`) fails the same way as an overloaded one: a later try usually gets an answer.
 const PASSING = new RegExp(['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND', 'EPIPE', 'UND_ERR', 'socket hang up', 'fetch failed',
-  'network error', 'overloaded', 'rate limit', '\\b(?:408|429|50[0-4])\\b'].join('|'), 'i')
+  'network error', 'overloaded', 'rate limit', 'EMPTY_RESPONSE', 'response with no content', '\\b(?:408|429|50[0-4])\\b'].join('|'), 'i')
 /**
- * True when an error represents a transient network or model-provider failure: an HTTP 408, 429, or 5xx status, or a
- * connection that was refused, reset, timed out, or could not resolve its host.
+ * True when an error represents a transient network or model-provider failure: an HTTP 408, 429, or 5xx status, a model
+ * response with no content, or a connection that was refused, reset, timed out, or could not resolve its host.
  */
 export function transient(error: unknown): boolean {
   const status = (error as { status?: unknown } | undefined)?.status
@@ -410,12 +411,16 @@ export class DshExecutor implements Executor {
   private launchFailed(ticketId: string, assignmentId: string, error: unknown): void {
     const ticket = this.host.store.tickets.get(ticketId)
     if (!ticket || !liveTicket(ticket) || latestAssignment(ticket)?.id !== assignmentId) return
-    this.failed(ticketId, String(error))
+    // A failed prepare command leaves its directory for a person; any other launch failure interrupted the work.
+    this.failed(ticketId, String(error), !(error instanceof PrepareFailed))
   }
-  /** Records a `failed` report on the ticket and relays the failure to the main Session in one transaction. */
-  private failed(ticketId: string, summary: string): void {
+  /**
+   * Records a `failed` report on the ticket and relays the failure to the main Session in one transaction. `interrupted`
+   * marks a failure of the run rather than of the work, which the main Session may retry once without a person.
+   */
+  private failed(ticketId: string, summary: string, interrupted = false): void {
     this.host.store.atomic(() => {
-      const updated = this.host.engine.report(ticketId, { state: 'failed', summary })
+      const updated = this.host.engine.report(ticketId, { state: 'failed', summary, ...interrupted ? { interrupted } : {} })
       this.relay(resultRelay(updated, 'failed', summary))
     })
   }
@@ -506,7 +511,7 @@ export class DshExecutor implements Executor {
       const assignment = ticket && runningAssignment(ticket)
       if (!ticket || !assignment || !liveTicket(ticket) || this.host.closing()) return
       if (this.retries(assignment.id, error)) { this.resumeAfter(ticket.id, assignment.id, error); return }
-      void this.background(Promise.resolve().then(() => { this.failed(ticket.id, String(error)) }))
+      void this.background(Promise.resolve().then(() => { this.failed(ticket.id, String(error), true) }))
     }))
   }
   /** Unsubscribes from host agent events and clears any pending transient-retry timers. */
@@ -569,7 +574,7 @@ export class DshExecutor implements Executor {
       }
       const sent = this.host.sessions.prompt(sessionId, `retry:${assignmentId}:${tries}`, text, 'queue')
       void this.background(sent.finally(() => { if (waking) this.slots.free(ticketId); this.resuming.delete(assignmentId) })
-        .catch(failure => { this.failed(ticketId, String(failure)) }))
+        .catch(failure => { this.failed(ticketId, String(failure), true) }))
     }
     this.after(TRANSIENT_BACKOFF_MS * 2 ** (tries - 1), go)
   }

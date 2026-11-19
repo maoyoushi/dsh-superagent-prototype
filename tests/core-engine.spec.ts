@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Engine, MemoryRepositories, UserError, followupOwners, key, runningAssignment, ticketOutcome, ticketStage,
+import { Engine, MemoryRepositories, UserError, followupOwners, key, latestAssignment, runningAssignment, ticketOutcome, ticketStage,
   waitsForPerson } from '../src/core/index.ts'
 import type { Assessor, Assignment, Candidate, EngineOptions, Executor, OutboundMessage, Outcome, Policy, Ticket, Trigger } from '../src/core/index.ts'
 
@@ -1113,6 +1113,27 @@ describe('ticket commands', () => {
     expect(h.repo.tickets.get(other)!.ended).toBeUndefined()
     h.engine.report(other, { state: 'ready', summary: 'done' })
     expect(h.repo.tickets.get(other)).toMatchObject({ ended: { outcome: 'closed' } })
+  })
+
+  it('retries an interrupted Assignment without a person once in a row, and leaves every other failure to a person', () => {
+    const h = harness()
+    const ticketId = accepted(h).ticketId!
+    // A failure the worker reported is the work's: no automatic retry.
+    h.engine.report(ticketId, { state: 'failed', summary: 'tests fail' })
+    expect(() => h.engine.retryTicket(ticketId, 'interrupted')).toThrow(new UserError('notInterrupted'))
+    h.tick(10); h.engine.retryTicket(ticketId)
+    // An interrupted one is retried once; when that retry is interrupted too, a person decides.
+    h.engine.report(ticketId, { state: 'failed', summary: 'EMPTY_RESPONSE', interrupted: true })
+    expect(latestAssignment(h.repo.tickets.get(ticketId)!)!.report).toMatchObject({ interrupted: true })
+    h.tick(10); h.engine.retryTicket(ticketId, 'interrupted')
+    expect(latestAssignment(h.repo.tickets.get(ticketId)!)).toMatchObject({ retried: 'interrupted' })
+    h.engine.report(ticketId, { state: 'failed', summary: 'EMPTY_RESPONSE', interrupted: true })
+    expect(() => h.engine.retryTicket(ticketId, 'interrupted')).toThrow(new UserError('retriedAlready'))
+    h.tick(10); h.engine.retryTicket(ticketId)
+    expect(latestAssignment(h.repo.tickets.get(ticketId)!)!.retried).toBeUndefined()
+    // Only a failed report can be interrupted.
+    h.engine.report(ticketId, { state: 'blocked', summary: 'needs a decision', interrupted: true })
+    expect(latestAssignment(h.repo.tickets.get(ticketId)!)!.report).not.toHaveProperty('interrupted')
   })
 
   it('retries a ticket that reported failed with a new Assignment, and asks only a waiting worker for its status', () => {

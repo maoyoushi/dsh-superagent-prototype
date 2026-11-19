@@ -207,6 +207,11 @@ it('lets a worker go on after a passing provider failure, three times, before it
   // The fourth passing failure fails the ticket, as any other failure does at once.
   fail(busy)
   await vi.waitFor(() => expect(latestAssignment(ticket())?.report).toMatchObject({ state: 'failed', summary: expect.stringContaining('Service Unavailable') }))
+  // It failed on the run, not on the work: the main Session hears it may retry once without a person.
+  expect(latestAssignment(ticket())?.report).toMatchObject({ interrupted: true })
+  expect(h.relays(h.runtime.masterId).at(-1)).toMatchObject({ kind: 'worker_report', state: 'failed', interrupted: true, auto_retry: 'available' })
+  await h.runTool(h.runtime.masterId, 'orchestrator_ticket_retry', { ticket_id: one.ticket.id, cause: 'interrupted' })
+  expect(latestAssignment(ticket())).toMatchObject({ retried: 'interrupted' })
 })
 describe('a worker that goes on after a passing failure', () => {
   const busy = () => Object.assign(new Error('Service Unavailable'), { status: 503 })
@@ -791,6 +796,7 @@ it('wakes an idle worker for a status request in the slot kept for a person, whi
 })
 it('tells a passing failure of the provider or the network from one that a later try would meet again', () => {
   for (const error of [Object.assign(new Error('x'), { status: 429 }), Object.assign(new Error('x'), { status: 503 }),
+    Object.assign(new Error('model "m" returned a completed response with no content'), { code: 'EMPTY_RESPONSE' }),
     Object.assign(new Error('connect'), { code: 'ECONNRESET' }), new TypeError('fetch failed'), new Error('getaddrinfo EAI_AGAIN api.example.com')]) {
     expect(transient(error)).toBe(true)
   }

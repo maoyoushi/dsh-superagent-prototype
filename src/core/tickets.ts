@@ -165,13 +165,17 @@ export class Tickets extends EnginePart {
    * Ends the stalled assignment of a retryable open ticket (`failed`, `blocked`, or failed input delivery) and starts a new one.
    * @throws UserError when the ticket is unknown or not retryable.
    */
-  retry(ticketId: string): Ticket {
+  retry(ticketId: string, cause?: 'interrupted'): Ticket {
     const ticket = this.require(ticketId)
     const latest = latestAssignment(ticket)
     if (!canRetry(ticket) || !latest) throw new UserError('notRetryable')
+    // An automatic retry is for an interrupted Assignment only, and never twice in a row: a second interruption waits for a person.
+    if (cause && !latest.report?.interrupted) throw new UserError('notInterrupted')
+    if (cause && latest.retried) throw new UserError('retriedAlready')
     this.endAssignment(ticket, latest, 'retried')
     this.requeueUntaken(ticket, latest)
     const assignment = this.newAssignment(ticket)
+    if (cause) assignment.retried = cause
     ticket.updatedAt = this.now()
     this.repo.tickets.save(ticket)
     this.options.executor.stop(ticket, latest, 'retried')

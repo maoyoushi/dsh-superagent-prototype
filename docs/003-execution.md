@@ -126,7 +126,9 @@ Threads followed only for context still deliver revisions, but do not give the T
 
 When an Executor Session reports `blocked` or `failed`, or fails to start or errors, which records `failed`, the Ticket takes no automatic Input. Its tools stay available, so a person can continue in the Session directly.
 
-A passing failure of the model provider or the network, an HTTP 408, 429 or 5xx or a refused, reset or timed-out connection, is tried again first, three times with a growing backoff: a launch runs again, and a worker whose turn failed is told to go on. A failed prepare command is not tried again, and neither is a launch that failed otherwise.
+A passing failure of the model provider or the network, an HTTP 408, 429 or 5xx, a model response with no content (`EMPTY_RESPONSE`) or a refused, reset or timed-out connection, is tried again first, three times with a growing backoff: a launch runs again, and a worker whose turn failed is told to go on. A failed prepare command is not tried again, and neither is a launch that failed otherwise.
+
+A `failed` Report the Executor records because the run stopped, a worker turn that errored or a launch that failed other than in its prepare command, is marked `interrupted`: the work did not fail, its run did. The main Session hears it with `auto_retry` `available` and retries it once without a person (`orchestrator_ticket_retry` with `cause` `interrupted`). An Assignment that such a retry started is marked `retried`; when it is interrupted too, `auto_retry` is `used` and the Ticket waits for a person, so a broken model or provider cannot loop. A failure the worker reports itself, and a failed prepare command, always wait for a person.
 
 A new revision of the plan, a later Report that is neither `blocked` nor `failed`, or a retry ends the hold. It is worked out from the stored Reports and Inputs, so a restart keeps it.
 

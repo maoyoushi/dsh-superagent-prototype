@@ -14,6 +14,8 @@ export const USER_ERRORS = {
   notExplicit: ['refused', 'An accept through orchestrator_route is for explicit requests from allowed senders; assess proactive candidates with orchestrator_eval and orchestrator_eval_decide'],
   ticketStopped: ['refused', 'A person stopped this ticket; new work needs an accept through orchestrator_route'],
   mandateRevoked: ['refused', 'The current policy no longer holds this ticket\'s mandate; new work needs an accept through orchestrator_route'],
+  notInterrupted: ['refused', 'Only an Assignment whose turn was interrupted by an error can be retried automatically; ask the person instead'],
+  retriedAlready: ['refused', 'This Assignment was itself an automatic retry of an interrupted one; a second interruption waits for a person'],
   notRetryable: ['refused', 'Only an open ticket can be retried, and only when its worker last reported failed or blocked and no person has sent a message since, or when delivering an Input to its worker failed'],
   sourceThread: ['refused', 'This is the thread the ticket started on; it stays subscribed'],
   followedThread: ['refused', 'This thread is the ticket\'s own, such as its pull request\'s; it stays subscribed'],
