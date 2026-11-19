@@ -6,7 +6,7 @@ import { decisionMark } from './marks.ts'
 import { useAction, usePanel } from './provider.tsx'
 import { DecisionLine, Earlier, TicketLine, automatedRuns } from './rows.tsx'
 import { actorName, errorText, readableMarkers, reasonLabel, valueLabel, when, type T } from './text.ts'
-import { ActionLink, ClampText, ConfirmButton, Hint, LoadState, PageHead, Section, When } from './widgets.tsx'
+import { ActionLink, ClampText, ConfirmButton, Hint, LoadState, MarkdownLite, PageHead, Section, When, opensInPanel } from './widgets.tsx'
 
 /** Disposition tags for a Trigger; omits `ignore` (the common case) and suppresses fanout tags when every target Ticket is already listed in `subscribed`. */
 function triggerTags(t: T, trigger: TriggerRow, subscribed?: Set<string>): ReactNode {
@@ -105,9 +105,10 @@ function useThreadTimeline(key: string, target: string | undefined) {
   })
   return { data, error, reload, earlier }
 }
-export function ThreadPage({ id, target }: { id: string; target?: string }) {
+export function ThreadPage({ id, target, original = false }: { id: string; target?: string; original?: boolean }) {
   const { t, call, navigate, notify } = usePanel()
   const [decisionsOpen, setDecisionsOpen] = useState(false)
+  const [originalOpen, setOriginalOpen] = useState(original)
   const { data, error, reload, earlier } = useThreadTimeline(id, target)
   const requeue = useAction(async (trigger: string) => {
     const result = await call('POST triggers/:id/requeue', { id: trigger })
@@ -126,7 +127,11 @@ export function ThreadPage({ id, target }: { id: string; target?: string }) {
     await reload()
   }
   return <>
-    <PageHead title={readableMarkers(t, data.title)}>{data.url && <ActionLink href={data.url}>{t('openOriginal')}</ActionLink>}</PageHead>
+    <PageHead title={readableMarkers(t, data.title)}>{data.url && (opensInPanel(data.url)
+      ? <Button variant="outline" size="sm" icon={<Icon name="external" size={14} />} aria-expanded={originalOpen}
+        onClick={() => setOriginalOpen(!originalOpen)}>{t(originalOpen ? 'closeOriginal' : 'openOriginal')}</Button>
+      : <ActionLink href={data.url}>{t('openOriginal')}</ActionLink>)}</PageHead>
+    {originalOpen && data.url && opensInPanel(data.url) && <OriginalText thread={data.key} />}
     {error && <LoadState error={error} loading={false} />}
     <div className="dt-row-meta dt-status-line">
       <span>{valueLabel(t, 'source', data.source)}</span><span>{t('threadLatest',
@@ -173,4 +178,14 @@ export function ThreadPage({ id, target }: { id: string; target?: string }) {
         onConfirm={unsubscribe} />
     </div>}
   </>
+}
+
+/** A Thread's original as its Source reads it now, such as a plan file, for a Thread whose URL the browser cannot open. */
+function OriginalText({ thread }: { thread: string }) {
+  const { t, call } = usePanel()
+  const { data, error } = usePoll(() => call('GET threads/:key/original', { key: thread }), [thread])
+  return <Section title={data ? data.path : t('openOriginal')}>
+    {data ? <div className="dt-original"><MarkdownLite text={data.text} /></div>
+      : error instanceof ApiError && error.missing ? <Hint>{t('originalMissing')}</Hint> : <LoadState error={error} loading={!error} />}
+  </Section>
 }

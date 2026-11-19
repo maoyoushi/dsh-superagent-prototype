@@ -10,7 +10,7 @@ export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'prompts', 'deplo
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
   | { page: 'trigger'; id?: undefined; query?: { filter?: ThreadFilter } }
-  | { page: 'trigger'; id: string; query?: { trigger?: string } }
+  | { page: 'trigger'; id: string; query?: { trigger?: string; original?: true } }
   | { page: 'eval'; id?: undefined; query?: { filter?: DecisionFilter; window?: '24h' } }
   | { page: 'execution'; id?: undefined; query?: { filter?: TicketFilter } }
   | { page: 'execution'; id: string; query?: undefined }
@@ -35,7 +35,7 @@ export function parseRoute(value: unknown): Route | undefined {
   const record = typeof id === 'string' && id ? id : undefined
   switch (page) {
     case 'overview': case 'source': return { page }
-    case 'trigger': return record ? { page, id: record, query: compact({ trigger: text('trigger') }) }
+    case 'trigger': return record ? { page, id: record, query: compact({ trigger: text('trigger'), original: query?.original === true ? true as const : undefined }) }
       : { page, query: compact({ filter: pick(THREAD_FILTERS, query?.filter) }) }
     case 'eval': return { page, query: compact({ filter: pick(DECISION_FILTERS, query?.filter),
       window: query?.window === '24h' ? '24h' as const : undefined }) }

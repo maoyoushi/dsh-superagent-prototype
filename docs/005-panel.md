@@ -27,6 +27,8 @@ The tabs follow the workflow: **Overview**, **Source**, **Trigger**, **Eval**, *
 
 A dropped message links to its Ticket, or to its Thread when it has no Ticket.
 
+**Open original** on a plan Thread, and the plan's chip or link on a Ticket, show the plan file's current text on the Thread's page. A browser does not open a `file:` URL from the panel, so the plan Source reads the file for it.
+
 A plan revision still owned by an Executor is marked **Delivered to Ticket**, without an Eval. The Thread also shows hand-back reasons and context-only Subscriptions. **Evaluate again** can send that revision to Eval, or retry a Trigger with no effective judgement: an unavailable Eval, or a delivered revision with neither a non-stop Decision nor an Executor acknowledgement.
 
 Ticket details show the originating Trigger, Decision and reason, scope and Policy version, and link to the plan file. Assignments and secondary details are folded below the immediate actions. **Retry** is available for failed Input delivery or a Ticket waiting for a person after a blocked or failed Report. Ended Tickets show outcomes such as **Completed**, **Nothing to do** or **Stopped by a person**.

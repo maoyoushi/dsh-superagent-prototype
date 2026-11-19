@@ -170,6 +170,8 @@ const TEXT = {
   unsubscribeConfirm: ['取消后，“{title}”的新触发不再扇出给工单，直到下一次接单或关联。', 'New Triggers in "{title}" will stop fanning out to Tickets until the next accept or attach.'],
   unsubscribePending: ['已取消订阅，结果等待注入主 Session。', 'Unsubscribed; the receipt is waiting to reach the main Session.'],
   openOriginal: ['打开原文', 'Open original'],
+  closeOriginal: ['收起原文', 'Hide original'],
+  originalMissing: ['读不到原文：文件可能已删除、移出了计划文件的路径模式，或超出大小上限。', 'The original cannot be read: the file may be deleted, outside the plan file patterns, or over the size limit.'],
   evaluatingBanner: ['评估进行中：{count} 条触发，{strength}，{deadline} 到期。', 'Eval running: {count} Triggers, {strength}, due {deadline}.'],
   noTriggers: ['没有保留的触发。', 'No retained Triggers.'],
   dispositionQueued: ['已排队，等待评估', 'Queued for Eval'],

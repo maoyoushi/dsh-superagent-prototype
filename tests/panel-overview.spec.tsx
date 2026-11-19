@@ -2,7 +2,7 @@
 // The overview.
 import { expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, remount, all, find, tab, click, text } from './fixtures/panel.tsx'
+import { usePanel, mount, remount, settle, all, find, tab, click, text } from './fixtures/panel.tsx'
 import { server, droppedReply, threadSummary } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -21,9 +21,23 @@ it('leads the overview with the pending Tickets, then problems, the last day and
   expect(all('.dt-stat').map(stat => stat.textContent)).toEqual(['到达12', '被过滤2', '已评估5', '接单或续做1', '执行中2 / 3', '排队0', '等待新触发1'])
   expect(all('.dt-chip').map(chip => chip.textContent)[0]).toBe('计划文件3 项检查失败1')
   expect(document.querySelector('.dt-chip-problem')?.textContent).toBe('检查失败1')
-  expect(document.querySelector<HTMLAnchorElement>('a.dt-chip-link')?.href).toBe('file:///repo/docs/plans/login.md')
   await click(all('.dt-more-link').at(-1)!)
   expect(tab(zh['tab.execution']).getAttribute('aria-selected')).toBe('true')
+})
+
+it('opens a plan file, whose file URL the browser would not open, on its Thread page with the file\'s current text', async () => {
+  await mount()
+  expect(document.querySelector('a.dt-chip-link[href^="file:"]')).toBeNull()
+  await click(document.querySelector<HTMLElement>('button.dt-chip-link')!)
+  await settle()
+  expect(server.requests.some(request => request.path === 'threads/plan:login.md/original')).toBe(true)
+  expect(document.querySelector('.dt-original')?.textContent).toContain('Rate-limit the login form')
+  // The page's own button hides the text again and shows it once more.
+  await click(zh.closeOriginal)
+  expect(document.querySelector('.dt-original')).toBeNull()
+  await click(zh.openOriginal)
+  await settle()
+  expect(document.querySelector('.dt-original')?.textContent).toContain('Rate-limit the login form')
 })
 
 it('re-evaluates or dismisses an unjudged Eval from the problem list', async () => {

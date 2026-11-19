@@ -106,6 +106,12 @@ export class SourceRegistry implements SourceScope {
     return { threads: [...new Set(found.flatMap(item => item.threads))], terms: [...new Set(found.flatMap(item => item.terms))] }
   }
   repliesTo(trigger: Trigger): string | undefined { return this.kinds.get(trigger.source)?.repliesTo?.(trigger) }
+  /** The current text of a Thread of `source`, through its kind's `original` reader with the instance's configuration. */
+  async original(source: string, thread: string, settings = this.settings()): Promise<{ path: string; text: string } | undefined> {
+    const kind = this.kinds.get(source)
+    if (!kind?.original) return undefined
+    return kind.original(thread, this.resolve(kind, settings.sources[kind.kind]).config)
+  }
   threadContext(trigger: Trigger, settings = this.settings()): TriggerContext | undefined {
     const kind = this.kinds.get(trigger.source)
     const context = kind?.threadContext

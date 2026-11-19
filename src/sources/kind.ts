@@ -102,6 +102,11 @@ export interface SourceKind<C extends Record<string, unknown> = Record<string, u
   threadContext?: ThreadContext<C>
   /** Maps a search query to candidate Thread keys (such as `plan:docs/plans/login.md`) and Trigger search terms (such as a message ID). */
   find?(query: string): { threads: string[]; terms: string[] }
+  /**
+   * The current text of one of this kind's Threads (such as `plan:docs/plans/login.md`), for a person to read in the panel
+   * where a browser cannot open its URL, such as a local file; undefined when the kind does not know it.
+   */
+  original?(thread: string, config: C): Promise<{ path: string; text: string } | undefined>
   /** Returns the ID of the Trigger whose message this Trigger replies to, when derivable without a network read. */
   repliesTo?(trigger: Trigger): string | undefined
   /** Policy section for kinds whose senders have their own identity. */

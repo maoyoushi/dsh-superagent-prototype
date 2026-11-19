@@ -5,7 +5,7 @@ import { Icon, Tag } from './controls.tsx'
 import { decisionMark, threadMark, ticketMark } from './marks.ts'
 import { usePanel } from './provider.tsx'
 import { actorName, localized, readableMarkers, reasonLabel, valueLabel } from './text.ts'
-import { ActionLink, ConfirmButton, LabelValue, SessionButton, StageMark, When } from './widgets.tsx'
+import { ActionLink, ConfirmButton, LabelValue, SessionButton, StageMark, When, opensInPanel } from './widgets.tsx'
 
 export function TicketLine({ ticket, question, onChanged, context }: {
   ticket: TicketRow; question?: boolean; onChanged?: () => Promise<void>; context?: boolean
@@ -101,8 +101,8 @@ export function DecisionLine({ decision }: { decision: DecisionRow }) {
   </li>
 }
 
-function ThreadChip({ thread }: { thread: Pick<ThreadFacts, 'source' | 'facts' | 'url' | 'title'> }) {
-  const { t } = usePanel()
+function ThreadChip({ thread }: { thread: Pick<ThreadFacts, 'key' | 'source' | 'facts' | 'url' | 'title'> }) {
+  const { t, navigate } = usePanel()
   const cells = <>
     <span className="dt-chip-source">{valueLabel(t, 'source', thread.source)}</span>
     {Object.entries(thread.facts).map(([id, fact]) => <span key={id} className={fact.problem ? 'dt-chip-fact dt-chip-problem'
@@ -110,8 +110,12 @@ function ThreadChip({ thread }: { thread: Pick<ThreadFacts, 'source' | 'facts' |
       {fact.label && <span className="dt-chip-label">{localized(t, fact.label)}</span>}{localized(t, fact.value)}
     </span>)}
   </>
+  const open = <span className="dt-chip-open"><Icon name="external" size={11} /></span>
+  // A local file's URL does not open from the panel: the chip opens the Thread's page with the file instead.
+  if (thread.url && opensInPanel(thread.url)) return <button type="button" className="dt-chip dt-chip-link" title={thread.title}
+    onClick={() => navigate({ page: 'trigger', id: thread.key, query: { original: true } })}>{cells}{open}</button>
   return thread.url ? <a className="dt-chip dt-chip-link" href={thread.url} target="_blank" rel="noopener noreferrer" title={thread.title}>
-    {cells}<span className="dt-chip-open"><Icon name="external" size={11} /></span>
+    {cells}{open}
   </a> : <span className="dt-chip">{cells}</span>
 }
 

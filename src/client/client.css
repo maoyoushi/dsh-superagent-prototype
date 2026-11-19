@@ -137,6 +137,7 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 16px; border-top: 0.5px solid var(--dsw-alias-border-l2); }
 .dt-danger-zone .dt-btn { color: var(--dsw-alias-state-error-primary); }
 .dt-md { display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.dt-original { padding: 12px 16px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 12px; max-height: 70vh; overflow: auto; }
 .dt-md p, .dt-md ul, .dt-md ol { margin: 0; }
 .dt-md ul, .dt-md ol { padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
 .dt-md-heading { font-weight: 500; }

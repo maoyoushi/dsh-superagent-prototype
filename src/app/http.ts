@@ -171,6 +171,13 @@ function routes(runtime: HttpHost): Routes {
       if (!detail) throw new RouteError(404, 'Thread not found')
       return detail
     },
+    'GET threads/:key/original': async ({ params }) => {
+      // Only a Thread the store knows, read by its own Source: the panel cannot open a local file URL itself.
+      const thread = store.threads.get(params.key)
+      const original = thread && await runtime.sources.original(thread.ref.source, thread.key)
+      if (!original) throw new RouteError(404, 'No original to show for this Thread')
+      return original
+    },
     'POST threads/:key/unsubscribe': async ({ params }) => {
       const removed = runtime.engine.unsubscribe(params.key)
       return { removed, thread: params.key, context_delivery: await runtime.sessions.delivery(`subscription:${params.key}`) }

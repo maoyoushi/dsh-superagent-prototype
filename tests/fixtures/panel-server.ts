@@ -224,6 +224,9 @@ const ticketDetail = (): TicketPageView => ({
   { id: 'i2', kind: 'policy-changed', at: '2026-09-22T00:04:00Z', delivered: true, from: 'aaaaaaaaaaaaaaaa', to: 'bbbbbbbbbbbbbbbb' }],
 })
 function threadPage(key: string, { before, around }: { before?: string; around?: string }): ThreadPageView | undefined {
+  // A plan Thread, whose file URL the browser cannot open from the panel.
+  if (key === 'plan:login.md') return { ...threadSummary({ key, source: 'plan', title: 'login.md', url: 'file:///repo/docs/plans/login.md', facts: {} }),
+    tickets: [ticketSummary()], correlated: [], decisions: [], context: [], earlier: null, timeline: [] }
   if (key !== threadSummary().key) return undefined
   const base = { ...threadSummary(), tickets: [ticketSummary()], correlated: [{ key: 'plan:login.md', title: 'login.md' }], decisions: [],
     url: 'https://example.test/thread', context: [] }
@@ -314,6 +317,9 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const queued = (item: TriggerRow) => ({ ...item, disposition: { ...item.disposition, queued: true }, actions: { requeue: false } })
     return { ...found, timeline: found.timeline.map(item => server.queued.has(item.id) ? queued(item) : item) }
   } },
+  // A plan Thread's file, as the plan Source reads it for the panel.
+  'GET threads/:key/original': { answer: ({ params }) => params.key.startsWith('plan:')
+    ? { path: params.key.slice('plan:'.length), text: '# Login plan\n\n- [ ] Rate-limit the login form' } : refuse(404, 'No original to show for this Thread') },
   'POST threads/:key/unsubscribe': { answer: ({ params }) => {
     const removed = server.threads.length > 0
     server.threads = []

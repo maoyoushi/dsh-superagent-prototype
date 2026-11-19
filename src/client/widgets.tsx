@@ -97,6 +97,15 @@ export function SessionButton({ sessionId, label,
 export function ExternalLink({ href, children, icon = 'external' }: { href: string; children: ReactNode; icon?: IconName }) {
   return <a className="dt-inline-link dt-icon-link" href={href} {...external}><Icon name={icon} size={13} />{children}</a>
 }
+/** A local file's URL, which a browser does not open from the panel; the panel shows such a Thread's original itself. */
+export const opensInPanel = (url: string): boolean => url.startsWith('file:')
+/** A link to a Thread's original: its URL, or, for a local file, the Thread's page with the file's current text. */
+export function OriginalLink({ url, thread, children }: { url: string; thread: string; children: ReactNode }) {
+  const { navigate } = usePanel()
+  if (!opensInPanel(url)) return <ActionLink href={url}>{children}</ActionLink>
+  return <Button variant="outline" size="sm" icon={<Icon name="external" size={14} />}
+    onClick={() => navigate({ page: 'trigger', id: thread, query: { original: true } })}>{children}</Button>
+}
 export function ActionLink({ href, children, icon = 'external' }: { href: string; children: ReactNode; icon?: IconName }) {
   return <a className="dt-btn dt-btn-outline dt-btn-sm" href={href} {...external}><span className="dt-btn-icon"><Icon name={icon}
     size={14} /></span>{children}</a>

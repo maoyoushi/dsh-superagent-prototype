@@ -11,7 +11,7 @@ import { KV } from '../kv.ts'
 import { health, sourceContext, type SourceContext } from './host.ts'
 import type { SourceKind } from './kind.ts'
 import { planChannel, planLog } from './plan-channel.ts'
-import { DEFAULT_PATTERNS, planFiles, type PlanFile } from './plan-files.ts'
+import { DEFAULT_PATTERNS, planFiles, readPlanFile, type PlanFile } from './plan-files.ts'
 import { pause } from './poll.ts'
 
 export const SOURCE = 'plan'
@@ -55,6 +55,12 @@ export const planKind: SourceKind<PlanConfig> = {
     read: async (_commands, trigger, part) => part === 'thread'
       ? { messages: [{ id: trigger.id, from: OPERATOR, at: trigger.at, text: trigger.text, path: String(trigger.meta.path ?? '') }], body: {} }
       : { messages: [], body: {} },
+  },
+  // A browser cannot open the plan's file URL from the panel, so the panel reads the file's current text here.
+  original: async (thread, config) => {
+    const path = thread.startsWith(`${SOURCE}:`) ? thread.slice(SOURCE.length + 1) : ''
+    const text = path && config.repository ? await readPlanFile(config.repository, path, config.patterns.map(item => item.pattern)) : undefined
+    return text === undefined ? undefined : { path, text }
   },
   // A plan named by a longer path, such as its path in the repository, matches the Thread of each of its path's suffixes.
   find: query => {

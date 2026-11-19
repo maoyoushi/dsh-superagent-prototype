@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, remount, all, find, tab, click, type, text, field, at } from './fixtures/panel.tsx'
+import { usePanel, mount, remount, settle, all, find, tab, click, type, text, field, at } from './fixtures/panel.tsx'
 import { MEMBER, server, ticketSummary, threadSummary } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -115,8 +115,11 @@ it('offers a Ticket awaiting review its review place and Session in the page hea
   at({ page: 'execution', id: 't1' })
   await mount()
   expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(zh['stage.review'])
-  expect(all('.dt-page-head a').map(link => [link.textContent, link.getAttribute('href')])).toEqual([['打开 计划文件 原文',
-    'file:///repo/docs/plans/login.md']])
+  // The plan file's URL does not open from the panel: the button shows the file on its Thread's page instead.
+  expect(all('.dt-page-head a[href^="file:"]')).toEqual([])
+  await click(find('打开 计划文件 原文', '.dt-page-head button'))
+  await settle()
+  expect(document.querySelector('.dt-original')?.textContent).toContain('Rate-limit the login form')
 })
 
 it('keeps what a person types in the Execution settings, converting it once on save', async () => {

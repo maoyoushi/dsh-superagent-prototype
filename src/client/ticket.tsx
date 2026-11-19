@@ -7,7 +7,7 @@ import { usePanel } from './provider.tsx'
 import { settingsRoute } from './route.ts'
 import { Earlier, ThreadLine, automatedRuns } from './rows.tsx'
 import { actorName, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
-import { ActionLink, ConfirmButton, ExternalLink, Hint, KeyValues, LabelValue, LoadState, MarkdownLite, PageHead, Section, SessionButton,
+import { ActionLink, OriginalLink, ConfirmButton, ExternalLink, Hint, KeyValues, LabelValue, LoadState, MarkdownLite, PageHead, Section, SessionButton,
   StageMark, When } from './widgets.tsx'
 
 type Input = TicketPageView['inputs'][number]
@@ -127,7 +127,7 @@ export function TicketPage({ id }: { id: string }) {
   const channel = data.channels[0]
   return <>
     <PageHead title={data.title}>
-      {opening?.url && <ActionLink href={opening.url}>{t('openThread', { source: valueLabel(t, 'source', opening.source) })}</ActionLink>}
+      {opening?.url && <OriginalLink url={opening.url} thread={opening.key}>{t('openThread', { source: valueLabel(t, 'source', opening.source) })}</OriginalLink>}
       {data.actions.retry && <ConfirmButton variant="outline" icon="refresh" label={t('retry')} title={t('retryTitle')}
         message={t('retryConfirm', { title: data.title })}
         onConfirm={() => after(call('POST tickets/:id/retry', { id }))} />}

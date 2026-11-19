@@ -1,6 +1,6 @@
 /** Finds the plan files of a repository: the Markdown files whose repository path matches one of the plan Source's patterns. */
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { join, relative, sep } from 'node:path'
+import { readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { isAbsolute, join, relative, sep } from 'node:path'
 import { key } from '../core/index.ts'
 
 /** The largest plan file read; a larger one is skipped. */
@@ -33,6 +33,24 @@ export interface PlanFile { path: string; file: string; text: string; hash: stri
  * read, a directory named with a trailing `/`, whose plans are neither received nor forgotten.
  */
 export interface PlanScan { files: PlanFile[]; large: string[]; unreadable: string[]; truncated: boolean }
+
+/**
+ * The current text of the plan file at repository path `path`, for a person to read: only a Markdown file the patterns match,
+ * outside skipped directories, no larger than a plan read, and inside `root` once links are followed; otherwise undefined.
+ */
+export async function readPlanFile(root: string, path: string, patterns: readonly string[]): Promise<string | undefined> {
+  const parts = path.split('/')
+  if (isAbsolute(path) || parts.some(part => part === '' || part === '..' || skipped(part)) || !/\.md$/i.test(path)) return undefined
+  if (!patterns.some(pattern => globMatcher(pattern).test(path))) return undefined
+  try {
+    const [base, file] = await Promise.all([realpath(root), realpath(join(root, ...parts))])
+    const inside = relative(base, file)
+    if (!inside || inside.startsWith('..') || isAbsolute(inside)) return undefined
+    const info = await stat(file)
+    if (!info.isFile() || info.size > PLAN_MAX_BYTES) return undefined
+    return await readFile(file, 'utf8')
+  } catch { return undefined }
+}
 
 /** Every Markdown file below `root` whose repository path matches one of `patterns`. */
 export async function planFiles(root: string, patterns: readonly string[]): Promise<PlanScan> {

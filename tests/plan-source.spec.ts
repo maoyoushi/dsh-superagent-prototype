@@ -1,10 +1,11 @@
 /** The plan Source: plan files found by pattern in a local checkout as Triggers from `operator`, their Tickets, and the reply log. */
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { checkPlans, planKind, OPERATOR, type PlanConfig } from '../src/sources/plan.ts'
 import { planLog } from '../src/sources/plan-channel.ts'
-import { DEFAULT_PATTERNS, globMatcher, planFiles } from '../src/sources/plan-files.ts'
+import { DEFAULT_PATTERNS, globMatcher, planFiles, readPlanFile } from '../src/sources/plan-files.ts'
 import type { SourceContext } from '../src/sources/host.ts'
 import { key } from '../src/core/index.ts'
 import { KV } from '../src/kv.ts'
@@ -193,4 +194,28 @@ describe('globMatcher', () => {
     expect(matches('Docs/Stories/**/*.md', 'docs/stories/1.md')).toBe(true)
     expect(matches('./plans/*.md', 'plans/a.md')).toBe(true)
   })
+})
+
+it('shows the panel a plan file\'s current text by its Thread, which a browser cannot open from its file URL', async () => {
+  write('plans/a.md', '# A')
+  await checkPlans(ctx, config({ includeExisting: true }))
+  const thread = encodeURIComponent('plan:plans/a.md')
+  write('plans/a.md', '# A, edited')
+  expect(await h.api('GET', `threads/${thread}/original`)).toMatchObject({ status: 200, body: { path: 'plans/a.md', text: '# A, edited' } })
+  // A Thread the plan Source never described has no original here.
+  expect(await h.api('GET', `threads/${encodeURIComponent('plan:plans/none.md')}/original`)).toMatchObject({ status: 404 })
+})
+
+it('reads a plan file only inside the repository, at a path its patterns match, and not through a link out of it', async () => {
+  const outside = mkdtempSync(join(tmpdir(), 'outside-'))
+  try {
+    writeFileSync(join(outside, 'secret.md'), 'secret')
+    write('plans/ok.md', 'ok'); write('notes/other.md', 'other')
+    symlinkSync(join(outside, 'secret.md'), join(repository, 'plans', 'link.md'))
+    const patterns = ['plans/**/*.md']
+    expect(await readPlanFile(repository, 'plans/ok.md', patterns)).toBe('ok')
+    for (const path of ['notes/other.md', '../secret.md', 'plans/../notes/other.md', 'plans/link.md', '/etc/hosts', 'plans/.hidden/x.md']) {
+      expect(await readPlanFile(repository, path, patterns)).toBeUndefined()
+    }
+  } finally { rmSync(outside, { recursive: true, force: true }) }
 })

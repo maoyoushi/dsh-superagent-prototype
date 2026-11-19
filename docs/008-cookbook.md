@@ -136,6 +136,7 @@ Assessment reads the conversation around a Trigger: `orchestrator_eval` reads an
 - `read(commands, trigger, part, cursor, config)` returns a `ContextPart`. Its `messages` use `ContextMessage`: `{id, from, at, text}` plus applicable `bot`, `deleted`, `reply_to`, `url`, `path` and `line` fields. `next` is omitted on the last page. `body` is the content shown to the assessing Session. `part` is `thread`, `root` or `parent`.
 - `messageId(trigger)` finds the Trigger's own message among them.
 - `images(text)` and `image(…)` are for a kind whose messages carry images; `repliesTo(trigger)` is for one whose messages reply to earlier ones. The plan Source has neither.
+- `original(thread, config)` returns a Thread's current text when a browser cannot open its URL from the panel. The plan Source's URLs are `file:` URLs, so it reads the file itself, through `readPlanFile`: only a Markdown file its patterns match, inside the repository once links are followed, and no larger than a plan read. The panel shows it on the Thread's page.
 
 A kind without `threadContext` gives assessments no Thread context; the Trigger's own text stays readable.
 
