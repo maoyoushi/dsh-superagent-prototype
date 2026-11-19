@@ -86,7 +86,10 @@ it('saves the Subagents block from the panel only, hides its environment values 
   const { runtime } = host
   vi.spyOn(runtime.subagents, 'sync').mockResolvedValue()
   const value = { ...runtime.store.settings().subagents, codex: { enabled: false, command: 'codex', env: { OPENAI_API_KEY: 'sk-secret' } },
-    roles: { develop: 'codex', verify: 'claude-code', review: 'worker' } }
+    roles: { develop: 'codex', verify: 'claude-code', review: 'codex' } }
+  // The worker coordinates and does no step itself, so it is no role's choice.
+  expect(await host.api('PUT', 'settings/subagents', { value: { ...value, roles: { ...value.roles, review: 'worker' } }, revision: 0 }))
+    .toMatchObject({ status: 400 })
   const saved = await host.api('PUT', 'settings/subagents', { value, revision: 0 })
   expect(saved).toMatchObject({ status: 200, body: { revision: 1 } })
   expect(runtime.store.settings().subagents).toMatchObject({ codex: { env: { OPENAI_API_KEY: 'sk-secret' } }, roles: { develop: 'codex' } })
@@ -105,15 +108,15 @@ it('saves the Subagents block from the panel only, hides its environment values 
   expect(runtime.health.subagents).toMatchObject({ state: 'ready' })
 })
 
-it('names each role\'s tool and the subtask bound in a ticket\'s execution environment, worker for the Executor itself', async () => {
+it('names each role\'s tool and the subtask bound in a ticket\'s execution environment', async () => {
   host = await startRuntime()
   const { runtime } = host
   const settings = runtime.store.settings()
-  runtime.store.saveSettings({ ...settings, subagents: { ...settings.subagents, roles: { develop: 'codex', verify: 'worker', review: 'claude-code' },
+  runtime.store.saveSettings({ ...settings, subagents: { ...settings.subagents, roles: { develop: 'codex', verify: 'claude-code', review: 'claude-code' },
     maxSubtaskMinutes: 45 } })
   const { ticket } = await host.acceptedTicket(chat('1', '修复登录页'))
   expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({
-    SUPER_CODING_AGENT_DEVELOP_TOOL: 'subagent_codex', SUPER_CODING_AGENT_VERIFY_TOOL: 'worker', SUPER_CODING_AGENT_REVIEW_TOOL: 'subagent_claude_code',
+    SUPER_CODING_AGENT_DEVELOP_TOOL: 'subagent_codex', SUPER_CODING_AGENT_VERIFY_TOOL: 'subagent_claude_code', SUPER_CODING_AGENT_REVIEW_TOOL: 'subagent_claude_code',
     SUPER_CODING_AGENT_SUBTASK_MINUTES: '45' })
 })
 
@@ -135,6 +138,9 @@ it('refuses a command that does not name the provider\'s executable, and runs th
     .rejects.toMatchObject({ code: 'subagentUnavailable', values: { provider: 'Codex' } })
   await expect(h.subagents.check(SubagentsConfigSchema.parse({ codex: { enabled: true, command: '/opt/codex/bin/codex' } }), h.current()))
     .resolves.toBeUndefined()
+  // A provider already enabled with an unchanged command is not checked again, so a save of other fields is not refused.
+  const legacy = SubagentsConfigSchema.parse({ codex: { enabled: true, command: '/opt/bin/not-codex' } })
+  await expect(h.subagents.check({ ...legacy, maxSubtaskMinutes: 30 }, legacy)).resolves.toBeUndefined()
   expect(providerEnv(SubagentsConfigSchema.parse({ codex: { command: '/opt/codex/bin/codex' } }), 'codex', '/usr/bin:/bin')).toEqual({ PATH: '/opt/codex/bin:/usr/bin:/bin' })
   expect(providerEnv(SubagentsConfigSchema.parse({}), 'codex', '/usr/bin')).toEqual({})
 })

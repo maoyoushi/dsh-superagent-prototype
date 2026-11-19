@@ -82,7 +82,8 @@ it('renders the Deployment page with the derived accounts in the Plugin Manager,
   expect(container.textContent).toBe('')
   server.form = fakeForm().form
   await render('page')
-  for (const fact of ['仓库/repo', '计划目录/repo/docs/plans', '仓库目录和计划目录在 super-coding-agent 面板的来源设置里修改。']) expect(text()).toContain(fact)
+  for (const fact of ['仓库/repo', '仓库目录在 super-coding-agent 面板的来源设置里修改。']) expect(text()).toContain(fact)
+  expect(text()).not.toContain('计划目录')
   server.setup = { ...server.setup, problem: problemOf('repositoryUnset'), accounts: null }
   await render('page')
   expect(text()).toContain('部署检查未通过：计划文件来源没有填写仓库目录。')

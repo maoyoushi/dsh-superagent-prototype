@@ -64,7 +64,7 @@ const words = (count: number) => Array.from({ length: count }, () => 'word').joi
 /** Start a configured Runtime on a fake DSH host (as in tests/runtime.spec.ts) that records registered tools, prompts, skills, and delivered messages per session. */
 async function start() {
   const directory = mkdtempSync(join(tmpdir(), 'model-surface-'))
-  // The checkout the plan Source names, which setup finds as a git checkout with its plan directory.
+  // The checkout the plan Source names, which setup finds as a git checkout.
   const repository = join(directory, 'repo')
   mkdirSync(join(repository, 'plans'), { recursive: true })
   vi.spyOn(Commands.prototype, 'git').mockResolvedValue('')
@@ -119,7 +119,7 @@ async function start() {
     webServer: { host: '127.0.0.1', port: 3082, register: () => () => {} } }
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
   const seed = new Store(join(directory, 'orchestrator.sqlite'))
-  const sources = { plan: { enabled: true, config: { repository, directory: 'plans' } },
+  const sources = { plan: { enabled: true, config: { repository, patterns: [{ pattern: 'plans/**/*.md' }] } },
     chat: { enabled: true, config: { chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true } } }
   seed.saveSettings(SettingsSchema.parse({ ...seed.settings(), sources }))
   seed.close()

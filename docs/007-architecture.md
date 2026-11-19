@@ -36,7 +36,7 @@ Shutdown cancels turns, waits for passes, effects and agents, restores the proce
 
 | Part | Module | Does |
 | --- | --- | --- |
-| Setup | `src/app/setup.ts` | Resolves the local checkout and the plan directory the plan Source names, running git the way worker shells run it, writes and applies the workers' environment and command shims, and keeps the setup problems; Settings checks a changed repository or plan directory through it, and restarts through it, which runs setup again |
+| Setup | `src/app/setup.ts` | Resolves the local checkout the plan Source names, running git the way worker shells run it, writes and applies the workers' environment and command shims, and keeps the setup problems; Settings checks a changed repository through it, and restarts through it, which runs setup again |
 | Passes | `src/app/passes.ts` | One pass at a time, every two seconds and whenever a command asks: the due effects, then `Engine.evaluateDue`; a Source's Trigger reaches the Engine through it |
 | Outbox | `src/app/outbox.ts` | The Engine's `Outbox` port, and the only writer of the receipts: `send` keeps a message's receipt and queues its `reply` effect in one transaction, and the effect's handler sends it through `SourceRegistry.send`; a message waits while its Source is off, and is dropped when the conversation is gone or not listened to |
 | Notices | `src/app/notices.ts` | Converts domain events and worker activity into main-Session messages. `eventNotice` handles domain notices; `reportRelay` forwards questions immediately, keeps ordinary progress on its Ticket, and relays other reports; `followupRelay` names the Tickets that own a human follow-up. Relays arriving during a turn are delivered together at its next step through the DeepSeek Harness inbox |
@@ -279,15 +279,15 @@ Each model request binds the Session to the current prompt revision. The revisio
 - **Fixed refusals.** A refusal a person or an agent can cause is a `UserError(code, values)` from `USER_ERRORS` in `src/core/errors.ts`. The management API answers a `missing` code with 404 and the others with 400, and the panel words each code in its language. Setup problems are `SetupError` codes (`src/setup.ts`) and fixed health texts `HealthCode`s (`src/sources/host.ts`), worded the same way.
 ### Source-specific dependencies
 
-No generic module refers to a particular Source kind. Setup reads the plan Source's `repository` and `directory` (`SETUP_FIELDS`), which make the deployment a local git checkout, and MasterAssessor reads that checkout's files with `readRepositoryPath`.
+No generic module refers to a particular Source kind. Setup reads the plan Source's `repository` (`SETUP_FIELDS`), which makes the deployment a local git checkout, and MasterAssessor reads that checkout's files with `readRepositoryPath`.
 
 
 ## Modules
 
 | Path | Responsibility |
 | --- | --- |
-| `src/index.ts` | The main plugin entry: reads the machine settings, starts the Runtime, and gives it the restart that a save of the plan Source's repository or plan directory uses |
-| `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` checks the local git checkout and the plan directory the plan Source names, git run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
+| `src/index.ts` | The main plugin entry: reads the machine settings, starts the Runtime, and gives it the restart that a save of the plan Source's repository uses |
+| `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` checks the local git checkout the plan Source names, git run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
 | `src/setup.ts` | Setup problems: `SetupError`, with a code, the place that fixes it and the English text the log, the main Session and the panel share |
 | `src/policy.ts` | The Policy: the settings schemas by block, the Policy version, the gate and Mandate revalidation |
 | `src/admission.ts` | The admission table's values, each cell's options and defaults, shared with the panel |
@@ -359,9 +359,9 @@ No generic module refers to a particular Source kind. Setup reads the plan Sourc
 | `src/sources/registry.ts` | `SourceRegistry` |
 | `src/sources/host.ts` | `SourceHost`, `SourceContext`, `Health`, `health` and the fixed health texts |
 | `src/sources/poll.ts` | `pause`, the delay of polling loops that fake timers drive |
-| `src/sources/plan.ts` | The plan kind and plugin entry, exported as `./plan-watch`: each new or changed Markdown file in the plan directory becomes a Trigger from `operator`, after a baseline of the files present when watching starts |
-| `src/sources/plan-files.ts` | `planFiles`: the plan files below a directory, outside hidden ones, with their content hashes |
-| `src/sources/plan-channel.ts` | The plan Channel: replies appended once per message to a plan file's log under `.super-coding-agent/`, never to the plan |
+| `src/sources/plan.ts` | The plan kind and plugin entry, exported as `./plan-watch`: each new or changed Markdown file in the repository whose path matches one of its patterns becomes a Trigger from `operator`, after a baseline of the files present when watching starts or the patterns change |
+| `src/sources/plan-files.ts` | `planFiles`: the files of a repository that match the plan patterns, outside hidden directories, dependencies and build output, with their content hashes, and those too large or unreadable; `globMatcher` and `DEFAULT_PATTERNS` |
+| `src/sources/plan-channel.ts` | The plan Channel: replies appended once per message to a plan file's log under `.super-coding-agent/logs/`, a directory that ignores itself in git, never to the plan |
 | `src/sources/admission-context.ts` | The bounded window an assessment starts from: the first pages of a Trigger's Thread, read through its kind, and the messages around the Trigger |
 | `src/client/index.tsx` | The client plugin entry: the sidebar entry, the main panel and the page in DeepSeek Harness's Plugin Manager |
 | `src/client/app.tsx` | The panel: header, search, glossary, tabs and the page of the current route |
@@ -410,7 +410,7 @@ No generic module refers to a particular Source kind. Setup reads the plan Sourc
 | `tests/followups.spec.ts` | A person's follow-up on a Ticket's Thread: its notice to the main Session, the tools that act on it, what a burst costs; a worker's hand-back and context follow, and the main Session's note |
 | `tests/health.spec.ts` | One health entry per part, each cleared by its own next success |
 | `tests/delivery.spec.ts` | `AgentDelivery` |
-| `tests/plan-source.spec.ts` | The plan Source: the baseline, new and changed plan files as Triggers and Tickets, the reply log, a missing directory, its Thread context and search |
+| `tests/plan-source.spec.ts` | The plan Source: the baseline, new and changed plan files as Triggers and Tickets, the default patterns, a pattern change, unreadable files and directories, the reply log and its `.gitignore`, `globMatcher`, its Thread context and search |
 | `tests/subagents.spec.ts` | The subagent providers: availability checks, mounting and remounting from settings, health, and the panel-only Subagents block whose environment values Sessions never read |
 | `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the models of the two roles |
 | `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
@@ -464,7 +464,7 @@ A generated column is computed from its row's JSON and is empty outside its set,
 | Prompt versions | `prompt-revision`, `prompt-version:<n>` |
 | Main Session | `master-id` |
 | Session prompt history | `session-prompts:<session id>` |
-| Source state | Read positions: for the plan Source, `plan-root`, the plan directory its baseline was taken for, and `plan-file:<root>:<path>`, each plan file's last received content hash |
+| Source state | Read positions: for the plan Source, `plan-root`, the scope, the repository and patterns, its baseline was taken for, and `plan-file:<root>:<path>`, each plan file's last received content hash |
 | Display names | `source-labels:<source id>` |
 
 Dismissal is stored on its Decision. Input text is rendered from the Ticket when read, so neither needs a separate key-value record.
@@ -519,7 +519,7 @@ Each Executor has six application tools:
 
 A hand-back returns `queued: false` if another Ticket still owns the message, or this Ticket never owned it.
 
-The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. `WORK_TOOLS` in `src/app/sessions.ts` retains available file, search, shell, job, web, skill and todo tools, and the one-shot delegation tools of the Claude Code and Codex providers (`subagent_claude_code`, `subagent_codex`). Workers do not receive tools for asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
+The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. `WORK_TOOLS` in `src/app/sessions.ts` retains only what a coordinator uses: `read`, `bash`, `pwsh`, the job tools, `skill`, `todo_write`, and the one-shot delegation tools of the Claude Code and Codex providers (`subagent_claude_code`, `subagent_codex`), which do all reading, writing and checking of code; the preset's file tools cannot write or edit, and it has no file search or web tools. Workers do not receive tools for writing, editing or searching files, using the web, asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
 
 ### Result shapes and assessment context
 
@@ -592,7 +592,7 @@ Most built-in instructions live in `prompts/*.md`, with one sentence per line jo
 
 Every plugin configuration key except `stateDir` is volatile. The panel's Deployment settings and DeepSeek Harness's Plugin Manager edit them through DeepSeek Harness's configuration form; the host writes `cordis.patch.yml` and updates the values in place, and super-coding-agent reads each limit when it uses it, so a change applies without a restart.
 
-A settings save that changes a Source field setup reads, the plan Source's repository or plan directory, and any save while setup waits, restarts super-coding-agent. DeepSeek Harness's settings service does not serve the entry during that restart, so after its own restart super-coding-agent asks it to read the entry again, and an open form becomes editable again.
+A settings save that changes a Source field setup reads, the plan Source's repository, and any save while setup waits, restarts super-coding-agent. DeepSeek Harness's settings service does not serve the entry during that restart, so after its own restart super-coding-agent asks it to read the entry again, and an open form becomes editable again.
 
 ## Reviewing a change against real data
 

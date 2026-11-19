@@ -73,7 +73,7 @@ let services: Record<string, unknown>
 let jobs: ReturnType<typeof jobRegistry>
 /** What worker commands of the startup checks print, by argv; an Error makes the command fail with its message. */
 let answers: Record<string, string | Error>
-/** The local checkout the plan Source names, with its plan directory. */
+/** The local checkout the plan Source names. */
 const REPO = () => join(directory, 'repo')
 const subprocess = { spawn: vi.fn((spec: { argv: readonly string[] }) => {
   // Strip leading `env` and `KEY=VALUE` arguments before looking up the command response.
@@ -88,7 +88,7 @@ type PlanSetup = Record<string, unknown> | null
 function seed(store: Store, plan: PlanSetup = {}): void {
   const settings = store.settings()
   const { plan: _plan, ...others } = settings.sources
-  store.saveSettings(SettingsSchema.parse({ ...settings, sources: { ...others, ...plan ? { plan: { enabled: true, config: { repository: REPO(), directory: 'plans', ...plan } } } : {},
+  store.saveSettings(SettingsSchema.parse({ ...settings, sources: { ...others, ...plan ? { plan: { enabled: true, config: { repository: REPO(), patterns: [{ pattern: 'plans/**/*.md' }], ...plan } } } : {},
     chat: { enabled: true, config: { chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true } } } }))
 }
 let restarts: ReturnType<typeof vi.fn<() => void>>
@@ -203,7 +203,7 @@ it('relays an explicit member mention as a candidate and creates the ticket, ack
   expect(ticket).not.toHaveProperty('ended')
   // The ticket's execution environment is fixed at accept time: its directory under the execution root, and the Sources' values from its Trigger.
   expect(ticket.execution!.directory).toBe(join(directory, 'work', ticket.execution!.name))
-  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({ SUPER_CODING_AGENT_DIR: ticket.execution!.directory, SUPER_CODING_AGENT_NAME: ticket.execution!.name, SUPER_CODING_AGENT_TICKET: ticket.id, SUPER_CODING_AGENT_REPOSITORY: REPO(), SUPER_CODING_AGENT_PLAN_DIR: join(REPO(), 'plans'), SUPER_CODING_AGENT_PLAN_FILE: '',
+  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({ SUPER_CODING_AGENT_DIR: ticket.execution!.directory, SUPER_CODING_AGENT_NAME: ticket.execution!.name, SUPER_CODING_AGENT_TICKET: ticket.id, SUPER_CODING_AGENT_REPOSITORY: REPO(), SUPER_CODING_AGENT_PLAN_FILE: '',
     // The role tools and the subtask bound, from the Subagents settings' defaults.
     SUPER_CODING_AGENT_DEVELOP_TOOL: 'subagent_claude_code', SUPER_CODING_AGENT_VERIFY_TOOL: 'subagent_codex', SUPER_CODING_AGENT_REVIEW_TOOL: 'subagent_codex',
     SUPER_CODING_AGENT_SUBTASK_MINUTES: '20' })
@@ -695,11 +695,13 @@ it('asks a question where the human message that raised it was written, not in t
 
 it('finds a plan file\'s Thread by its path, and triggers by a message id in a link', async () => {
   writeFileSync(join(REPO(), 'plans', 'login.md'), '# Login\n- [ ] Add rate limiting')
-  const config = planKind.schema.parse({ repository: REPO(), directory: 'plans', includeExisting: true })
+  const config = planKind.schema.parse({ repository: REPO(), patterns: [{ pattern: 'plans/**/*.md' }], includeExisting: true })
   expect(await checkPlans(runtime.context(planKind), config)).toBe(1)
   await runtime.idle()
-  expect(search(viewsOf(runtime), 'login.md').threads).toEqual([expect.objectContaining({ key: 'plan:login.md' })])
-  expect(search(viewsOf(runtime), 'rate limiting').items).toEqual([expect.objectContaining({ threads: ['plan:login.md'] })])
+  // A plan's Thread is named by its repository path, which a search by that path, or by the file's absolute path, finds.
+  expect(search(viewsOf(runtime), 'plans/login.md').threads).toEqual([expect.objectContaining({ key: 'plan:plans/login.md' })])
+  expect(search(viewsOf(runtime), join(REPO(), 'plans', 'login.md')).threads).toEqual([expect.objectContaining({ key: 'plan:plans/login.md' })])
+  expect(search(viewsOf(runtime), 'rate limiting').items).toEqual([expect.objectContaining({ threads: ['plan:plans/login.md'] })])
   const message = chat('30', '随便说说', { mentions: [] })
   await receive(message)
   expect(search(viewsOf(runtime), 'https://x/y?id=om_30').items.map(item => item.id)).toContain(message.id)
@@ -777,7 +779,6 @@ it('reports each setup problem where the operator fixes it, and checks the check
   expect(check.slice(2)).toEqual(['git', '-C', REPO(), 'rev-parse', '--show-toplevel'])
   await needs('plan', 'repositoryMissing', { repository: join(directory, 'nowhere') }, { repository: join(directory, 'nowhere') })
   await needs('plan', 'repositoryMissing', { repository: 'relative/repo' }, { repository: 'relative/repo' })
-  await needs('plan', 'planDirectoryMissing', { directory: join(REPO(), 'missing') }, { directory: 'missing' })
   const valid = { ...answers }
   answers = { ...valid, [`git -C ${REPO()} rev-parse --show-toplevel`]: new Error('fatal: not a git repository') }
   await needs('plan', 'repositoryNotGit', { repository: REPO(), output: 'fatal: not a git repository' })
@@ -805,11 +806,14 @@ it('checks only the setup fields a Source save changes, so a problem setup has e
   await next.ready
   expect(next.setupProblem).toMatchObject({ place: 'deployment', code: 'foreignFile' })
   next.sources.register(planKind)
-  mkdirSync(join(REPO(), 'docs'))
   const plan = next.settings.block('source:plan')
   const value = plan.value as { enabled: boolean; config: Record<string, unknown> }
-  expect(await next.settings.save('source:plan', { ...value, config: { ...value.config, directory: 'docs' } }, plan.revision, 'panel'))
+  // The repository, named differently, is checked again; the problem elsewhere does not refuse it, and setup restarts.
+  expect(await next.settings.save('source:plan', { ...value, config: { ...value.config, repository: `${REPO()}/` } }, plan.revision, 'panel'))
     .toMatchObject({ saved: true, restarting: true })
+  // The plan patterns are no setup field, so their save is not checked either.
+  expect(await next.settings.save('source:plan', { ...value, config: { ...value.config, patterns: [{ pattern: 'docs/**/*.md' }] } }, plan.revision + 1, 'panel'))
+    .toMatchObject({ saved: true })
   await next.stop()
 })
 
@@ -934,7 +938,8 @@ it('tells both roles the execution environment through a generated prompt sectio
   const preview = runtime.prompts.preview(runtime.prompts.current().config)
   const section = preview.parts.worker.at(-1)!
   expect(section.name).toBe('runtime/environment')
-  for (const line of [`- SUPER_CODING_AGENT_REPOSITORY = ${JSON.stringify(REPO())}`, `- SUPER_CODING_AGENT_PLAN_DIR = ${JSON.stringify(join(REPO(), 'plans'))}`]) expect(section.text).toContain(line)
+  expect(section.text).toContain(`- SUPER_CODING_AGENT_REPOSITORY = ${JSON.stringify(REPO())}`)
+  expect(section.text).not.toContain('SUPER_CODING_AGENT_PLAN_DIR')
   expect(section.text).not.toContain('MERGE_ACCOUNT')
   // Outside a ticket there is no ticket directory.
   expect(section.text).not.toContain('SUPER_CODING_AGENT_DIR')
@@ -1447,7 +1452,10 @@ it('refuses an ended ticket\'s worker its tools, and restricts the main Session 
   expect(restricts.get(runtime.masterId)).toEqual([{ allow: ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill'] }])
   // A worker keeps only the profile's work tools: none that ask a person, change the profile, schedule or start work outside
   // the worker slots, reach other Sessions or edit documents, whenever they were registered.
-  expect(restricts.get(sessionId)).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
+  expect(restricts.get(sessionId)).toEqual([{ allow: ['read', 'bash', 'job_output', 'job_list', 'job_kill', 'skill'] }])
+  // It only coordinates: no tool that writes, edits or searches files, reads images or uses the web, though the profile has some.
+  const allowed = (restricts.get(sessionId)![0] as { allow: string[] }).allow
+  for (const tool of ['write', 'edit', 'grep', 'glob', 'read_image', 'web_search', 'web_fetch']) expect(allowed).not.toContain(tool)
 })
 
 it('gives an explicit ticket\'s worker a prompt without the limits of an inferred Mandate', async () => {
@@ -1601,7 +1609,7 @@ it('gives a subagent of a worker only the worker\'s work tools, and none once th
   const child = agents.get('child-1')! as unknown as { session: { header: { parentSession?: string } } }
   child.session.header = { parentSession: sessionId }
   await (runtime as unknown as { ctx: Context }).ctx.parallel('agent/created', { agent: child } as never)
-  expect(restricts.get('child-1')).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
+  expect(restricts.get('child-1')).toEqual([{ allow: ['read', 'bash', 'job_output', 'job_list', 'job_kill', 'skill'] }])
   expect(guards.get('child-1')!()).toBeUndefined()
   runtime.engine.stopTicket(ticket.id)
   expect(guards.get('child-1')!()).toBe('Ticket ended; new work needs a new authorized ticket')
@@ -1623,7 +1631,7 @@ it('gives a subagent of a worker\'s subagent the same work tools and guard', asy
     agent.session.header = { parentSession: parent }
     await created.parallel('agent/created', { agent } as never)
   }
-  expect(restricts.get('grandchild-1')).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
+  expect(restricts.get('grandchild-1')).toEqual([{ allow: ['read', 'bash', 'job_output', 'job_list', 'job_kill', 'skill'] }])
   runtime.engine.stopTicket(ticket.id)
   expect(guards.get('grandchild-1')!()).toBe('Ticket ended; new work needs a new authorized ticket')
 })

@@ -8,7 +8,7 @@ Every part of the project is judged by the attention it costs. A log entry, a qu
 
 ## What follows for the agent
 
-- **It acts only when asked.** A request is a plan file the operator wrote in the plan directory. The agent never starts work from a file it found elsewhere, and a plan that was already there when it started watching is not a request unless the operator says so.
+- **It acts only when asked.** A request is a plan file the operator wrote in the repository, at a path the plan Source's patterns name. The agent never starts work from a file outside those patterns, and a plan that was already there when it started watching is not a request unless the operator says so.
 - **It speaks only when a person must act or can use a result.** It confirms a plan once and names what it will do. It stays quiet while it works. It writes again when a result is ready, when it needs a decision, or when it cannot finish. Its messages are short and go to the plan's log.
 - **It asks one concrete question at a time,** in a structured form, so the question reaches the person instead of staying inside a long report.
 - **It stops by impact, not by effort.** A local change goes as far as a verified commit. A change that needs a design decision the plan left open stops with a clear question.

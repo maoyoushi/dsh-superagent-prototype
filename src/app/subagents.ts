@@ -78,11 +78,10 @@ export class Subagents {
   async check(candidate: SubagentsConfig, current: SubagentsConfig): Promise<void> {
     for (const provider of SUBAGENT_PROVIDERS) {
       const next = candidate[KEYS[provider]], before = current[KEYS[provider]]
-      if (!next.enabled) continue
+      if (!next.enabled || (before.enabled && before.command === next.command)) continue
       if (basename(next.command) !== EXECUTABLES[provider]) {
         throw new UserError('subagentUnavailable', { provider: LABELS[provider], error: `the provider starts ${EXECUTABLES[provider]}; the command must be ${EXECUTABLES[provider]} or a path ending in /${EXECUTABLES[provider]}` })
       }
-      if (before.enabled && before.command === next.command) continue
       // A refused save leaves the mounted provider as it is, so its check is not recorded as the provider's state.
       const result = await this.probe(provider, next.command, false)
       if (!result.available) throw new UserError('subagentUnavailable', { provider: LABELS[provider], error: result.error })

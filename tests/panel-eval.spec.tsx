@@ -67,7 +67,7 @@ it('keeps the Policy to its rules and each Source\'s part, in that Source\'s own
   expect(text()).toContain('名单内的人 @ 机器人或私聊机器人。')
   await click(find(zh['source.plan'], '.dt-subtab'))
   expect(text()).toContain('能发起工作的发送者')
-  expect(text()).toContain('计划目录里新增或修改的计划文件，发送者为 operator。')
+  expect(text()).toContain('仓库里新增或修改的计划文件，发送者为 operator。')
   // A saved sender shows as its id; only a row being added is a field.
   expect(all('.dt-part .dt-rows-item .dt-row-label').map(label => label.textContent)).toEqual(['operator'])
 })

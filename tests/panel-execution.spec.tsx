@@ -235,13 +235,15 @@ it('saves the Subagents settings with their environment parsed once, and shows w
   expect(text()).toContain('可用 · 2.1.327 (Claude Code)')
   await type(field<HTMLInputElement>(zh.subagentModel), 'claude-opus-5-5')
   await type(field<HTMLTextAreaElement>('Claude Code 环境变量'), 'ANTHROPIC_BASE_URL=https://example.test\n\nnot a variable')
-  await type(field<HTMLSelectElement>(zh['subagentRole.review']), 'worker')
+  // The Executor coordinates only, so each role is one of the two providers.
+  expect([...field<HTMLSelectElement>(zh['subagentRole.review']).options].map(option => option.value)).toEqual(['claude-code', 'codex'])
+  await type(field<HTMLSelectElement>(zh['subagentRole.review']), 'codex')
   await type(field<HTMLInputElement>(zh.subagentMinutes), '30')
   const saves = () => all('.dt-savebar button').filter(button => button.textContent === zh.save)
   await click(saves().at(-1)!)
   expect(server.requests.find(request => request.path === 'settings/subagents')?.body).toMatchObject({ value: {
     claudeCode: { enabled: true, model: 'claude-opus-5-5', env: { ANTHROPIC_BASE_URL: 'https://example.test' } },
-    roles: { develop: 'claude-code', verify: 'codex', review: 'worker' }, maxSubtaskMinutes: 30 } })
+    roles: { develop: 'claude-code', verify: 'codex', review: 'codex' }, maxSubtaskMinutes: 30 } })
   expect(server.settings.subagents).toMatchObject({ claudeCode: { model: 'claude-opus-5-5' }, maxSubtaskMinutes: 30 })
   // Enabling Codex, whose command does not start, is refused with the check's output.
   await click(find('启用 Codex', '[role="switch"]'))

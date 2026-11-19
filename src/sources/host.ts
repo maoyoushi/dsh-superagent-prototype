@@ -12,7 +12,6 @@ export const HEALTH_TEXT = {
   setupPending: 'Waiting for the deployment check',
   sourceOff: 'Off',
   pollFailures: '{count} consecutive failed polls; last: {error}',
-  planDirectoryMissing: 'The plan directory {directory} does not exist',
 } as const
 export type HealthCode = keyof typeof HEALTH_TEXT
 export type Health = { state: 'starting' | 'ready' | 'paused' | 'error'; detail: string; at?: string; code?: HealthCode; values?: Record<string, string> }
@@ -31,7 +30,7 @@ export interface SourceContext {
   readonly deployment: Deployment
   readonly commands: Commands
   readonly ready: Promise<void>
-  /** True once setup resolved the repository and plan directory; Sources poll only then. */
+  /** True once setup resolved the repository; Sources poll only then. */
   configured(): boolean
   /** Setup problem whose place is this Source, such as a plan Source naming no repository. */
   readonly problem?: SetupProblem | undefined

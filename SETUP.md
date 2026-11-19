@@ -34,13 +34,13 @@ Ask in this order, one per message, following the flow of work in [docs/001-doma
 **Source: where plans come from.**
 
 1. **Repository.** Which local git checkout should the agent work on, as an absolute path? Every Ticket gets its own worktree of it, on a branch `agent/<ticket>`; the checkout itself is not changed except for the reply logs.
-2. **Plan directory.** Where in that checkout do the plans live? [`docs/plans`: every Markdown file below it is a plan; hidden directories are skipped.] Setup creates it if it does not exist.
-3. **Existing plans.** Should plans already in the directory become work? [No: they are taken as a baseline, and only plans added or changed afterwards start work, so nothing starts that the operator did not just write.]
+2. **Plan patterns.** Which files in that checkout are plans? [The defaults: `PLAN.md`, `PLANS.md`, `TASKS.md`, `TODO.md`, `plans/**/*.md`, `tasks/**/*.md`, `docs/plans/**/*.md`, `docs/superpowers/plans/**/*.md`, `docs/stories/**/*.md`, `_bmad-output/**/stories/**/*.md` and `specs/**/tasks.md`, which cover superpowers, BMAD, speckit and plain plan or task files. Globs from the repository root, case-insensitive; hidden directories, `node_modules` and build output are never read.] Change them only when the team keeps plans elsewhere.
+3. **Existing plans.** Should plans already in the checkout become work? [No: they are taken as a baseline, and only plans added or changed afterwards start work, so nothing starts that the operator did not just write.]
 
 **Execution: who does the work.**
 
 4. **Subagents.** Which of Claude Code and Codex are installed and signed in, with each CLI's own login? [Both, when the probe found both.] A CLI that is missing or not signed in is an operator step; one that signs in with an API key gets it in the panel, never in the chat.
-5. **Roles.** Who develops, verifies and reviews each subtask? [Claude Code develops, Codex verifies and reviews: a second model checks the first one's work.] With one CLI, it takes every role, or the Executor itself (`worker`) takes the step it cannot.
+5. **Roles.** Who develops, verifies and reviews each subtask? [Claude Code develops, Codex verifies and reviews: a second model checks the first one's work.] With one CLI, it takes every role: the Executor itself only coordinates and takes no step.
 6. **Claude Code model.** Which model should Claude Code use? [Empty: Claude Code's own setting.] Codex takes its model from its own configuration.
 
 Do not ask about values with a good default; list them in the plan instead:
@@ -58,7 +58,7 @@ Send one message, under 300 words: what will be installed, the settings to save,
 ## 4. Execute
 
 1. **Operator steps first.** Send one message with what only the operator can do: install or sign in Claude Code (run `claude` and follow its login) and Codex (`codex login`) as question 4 needs, and configure a DSH model provider if there is none. Wait until the operator says it is done, then run the probe's version lines again.
-2. **Install and start.** Follow the Install, Machine configuration, and Start and stop sections of `docs/006-deployment.md`. Skip the `git clone` of this repository: you are in its checkout. With an existing profile, skip the `dsh super-coding-agent --from-default-profile` command, which would replace the profile and delete its `cordis.patch.yml`, and edit that file instead of replacing it. Create the plan directory of question 2 if it does not exist.
+2. **Install and start.** Follow the Install, Machine configuration, and Start and stop sections of `docs/006-deployment.md`. Skip the `git clone` of this repository: you are in its checkout. With an existing profile, skip the `dsh super-coding-agent --from-default-profile` command, which would replace the profile and delete its `cordis.patch.yml`, and edit that file instead of replacing it.
 3. **Settings.** Save them through the Management API of `docs/006-deployment.md`, in this order: the `source:plan` block with the answers to questions 1 to 3, then the `subagents` block with the answers to questions 4 to 6, leaving `env` empty. A save that returns `restarting: true` restarts super-coding-agent: wait until `scripts/super-coding-agent status` no longer exits 1 before the next request, and read the revisions again from `GET settings`. If a CLI signs in with an API key, ask the operator to enter it in **Settings → Execution → Subagents** in the panel.
 4. **Failures.** A refused save names the problem in its response body. Find it in the Troubleshooting table of `docs/006-deployment.md`, fix it, and continue. Ask the operator only for what you cannot fix yourself.
 
@@ -67,6 +67,6 @@ Send one message, under 300 words: what will be installed, the settings to save,
 `scripts/super-coding-agent status` exits 0 with no setup problem, and its `health` shows `plan` and `subagents` as `ready`. If you run in the operator's own DSH profile, create the hourly check of the Hourly check section of `docs/006-deployment.md` with your schedule tool; otherwise give the operator its prompt to schedule there. Then send one message, under 300 words:
 
 - The panel URL, and that the **Super Coding Agent** entry in the sidebar is where to look.
-- How to try it: write a small plan, with its acceptance criteria, as a new Markdown file in the plan directory. A Ticket appears on the overview within a minute, the answers appear in `<plan directory>/.super-coding-agent/<file>.log.md`, and the result is a branch `agent/<ticket name>`.
+- How to try it: write a small plan, with its acceptance criteria, as a new Markdown file at a path the patterns match, such as `docs/plans/first.md`. A Ticket appears on the overview within a minute, the answers appear in `<repository>/.super-coding-agent/logs/<path>.log.md`, and the result is a branch `agent/<ticket name>`.
 - Three rules for the operator, from the Responsibility section of `docs/000-philosophy.md`: start small, tune for less noise, own what the agent commits.
 - Where to read more: the numbered documents in `docs/`, in order.

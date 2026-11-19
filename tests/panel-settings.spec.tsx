@@ -42,9 +42,9 @@ it('saves the Eval block on the Policy settings and the Executor with its execut
   const prepare = field<HTMLTextAreaElement>(zh.prepareCommand)
   await type(prepare, 'git worktree add ')
   prepare.setSelectionRange(17, 17)
-  await click('可用的环境变量 3')
+  await click('可用的环境变量 4')
   expect(all('.dt-table tbody tr').map(row => row.textContent)).toEqual(['SUPER_CODING_AGENT_DIR工单的执行目录执行器', 'SUPER_CODING_AGENT_NAME工单短名执行器',
-    'SUPER_CODING_AGENT_REPOSITORY仓库计划文件 · 已关闭'])
+    'SUPER_CODING_AGENT_REPOSITORY仓库执行器', 'SUPER_CODING_AGENT_PLAN_FILE计划文件计划文件 · 已关闭'])
   await click('SUPER_CODING_AGENT_DIR')
   expect(field<HTMLTextAreaElement>(zh.prepareCommand).value).toBe('git worktree add "$SUPER_CODING_AGENT_DIR"')
   await type(field<HTMLInputElement>(zh.blockedCommands), 'personal-cli  other.cli')

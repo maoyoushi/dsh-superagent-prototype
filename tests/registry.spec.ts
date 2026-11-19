@@ -9,6 +9,7 @@ import type { Commands } from '../src/infra/commands.ts'
 import { HealthBoard } from '../src/infra/health.ts'
 import { sourceContextOf, type SourceContextDeps } from '../src/app/source-context.ts'
 import { planKind } from '../src/sources/plan.ts'
+import { DEFAULT_PATTERNS } from '../src/sources/plan-files.ts'
 import { chatChannel, chatKind, chatTrigger, chatTriggerId } from './fixtures/chat.ts'
 
 const probe: SourceKind<{ interval: number }> = {
@@ -23,8 +24,8 @@ describe('Source registry', () => {
     const sources = new SourceRegistry(() => settings)
     sources.register(probe); sources.register(planKind)
     expect(sources.instances()).toEqual([
-      { id: 'plan', kind: 'plan', enabled: true, config: { repository: '', directory: 'docs/plans', pollSeconds: 30, failuresBeforeError: 3,
-        includeExisting: false }, installed: true },
+      { id: 'plan', kind: 'plan', enabled: true, config: { repository: '', patterns: DEFAULT_PATTERNS.map(pattern => ({ pattern })), pollSeconds: 30,
+        failuresBeforeError: 3, includeExisting: false }, installed: true },
       { id: 'probe', kind: 'probe', enabled: false, config: { interval: 9 }, installed: true },
       { id: 'retired', kind: 'retired', enabled: true, config: { x: 1 }, installed: false },
     ])
@@ -108,7 +109,7 @@ describe('Source registry', () => {
   it('finds what a search query names in each kind\'s terms', () => {
     const sources = new SourceRegistry(() => SettingsSchema.parse({}))
     sources.register(chatKind); sources.register(planKind)
-    // A path in the repository also names the plan by its path in the plan directory.
+    // A longer path also names the plan by each of its suffixes.
     expect(sources.find('docs/plans/login.md')).toEqual({ threads: ['plan:docs/plans/login.md', 'plan:plans/login.md', 'plan:login.md'], terms: [] })
     expect(sources.find('./auth/login.md')).toEqual({ threads: ['plan:auth/login.md', 'plan:login.md'], terms: [] })
     expect(sources.find('see om_abc and om_abc, om_def')).toEqual({ threads: [], terms: ['om_abc', 'om_def'] })

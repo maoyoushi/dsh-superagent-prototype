@@ -12,16 +12,16 @@ export const EXECUTOR_VARIABLES: readonly (VariableSpec & { ticket?: true })[] =
   { key: 'SUPER_CODING_AGENT_NAME', ticket: true, description: { zh: '工单的短名，也是执行目录的名字', en: 'The ticket\'s short name, also its directory\'s name' } },
   { key: 'SUPER_CODING_AGENT_TICKET', ticket: true, description: { zh: '工单 id', en: 'The ticket id' } },
   { key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '本地 git 检出的绝对路径；默认的准备命令从它创建工单的 worktree', en: 'Absolute path of the local git checkout, which the default prepare command makes each Ticket\'s worktree from' } },
-  { key: 'SUPER_CODING_AGENT_DEVELOP_TOOL', description: { zh: '开发子任务所用的工具；worker 表示执行器自己做', en: 'The tool that develops a subtask; worker means the Executor does it itself' } },
-  { key: 'SUPER_CODING_AGENT_VERIFY_TOOL', description: { zh: '验证子任务所用的工具；worker 表示执行器自己做', en: 'The tool that verifies a subtask against its acceptance checks; worker means the Executor does it itself' } },
-  { key: 'SUPER_CODING_AGENT_REVIEW_TOOL', description: { zh: '审查子任务所用的工具；worker 表示执行器自己做', en: 'The tool that reviews a subtask\'s diff; worker means the Executor does it itself' } },
+  { key: 'SUPER_CODING_AGENT_DEVELOP_TOOL', description: { zh: '开发子任务所用的工具', en: 'The tool that develops a subtask' } },
+  { key: 'SUPER_CODING_AGENT_VERIFY_TOOL', description: { zh: '验证子任务所用的工具', en: 'The tool that verifies a subtask against its acceptance checks' } },
+  { key: 'SUPER_CODING_AGENT_REVIEW_TOOL', description: { zh: '审查子任务所用的工具', en: 'The tool that reviews a subtask\'s diff' } },
   { key: 'SUPER_CODING_AGENT_SUBTASK_MINUTES', description: { zh: '单个子任务应在多少分钟内完成', en: 'Minutes one delegated subtask should finish within' } },
   { key: 'SUPER_CODING_AGENT_BLOCKED_COMMANDS', description: { zh: '这个执行环境禁止调用的命令，以空格分隔；不要运行它们', en: 'Commands blocked in this execution environment, separated by spaces; never run them' } },
 ]
 export interface Variable { key: string; value: string; description: Localized; owner: string }
 
 /** The delegation tool of a role's choice, as the worker preset names it. */
-const ROLE_TOOLS: Record<SubagentRole, string> = { 'claude-code': 'subagent_claude_code', codex: 'subagent_codex', worker: 'worker' }
+const ROLE_TOOLS: Record<SubagentRole, string> = { 'claude-code': 'subagent_claude_code', codex: 'subagent_codex' }
 export const executionRoot = (settings: Settings, stateDir: string): string => settings.executor.directory || join(stateDir, 'work')
 
 /** Lists all declared variables grouped by owner; `enabled` is false for Sources that are currently switched off. */

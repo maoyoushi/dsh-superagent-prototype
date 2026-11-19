@@ -24,11 +24,11 @@ Source, Thread, Eval, Mandate and Subscription form the core domain; the rest su
 
 | Concept | With plan files | Rules it keeps | Why it exists |
 | --- | --- | --- | --- |
-| Source | The plan directory of one local git checkout. A Source kind is a reusable implementation; a Source instance is one configuration of a kind: whether it runs and what it reads | Holds its read position: the content hash of each plan file it has seen. Defines what counts as an event: a Markdown file that is new or whose content changed. Translates each Trigger into the Thread it belongs to and the Channel address to reply on | A restart must not replay events |
+| Source | The plan files of one local git checkout, found anywhere in it by path pattern. A Source kind is a reusable implementation; a Source instance is one configuration of a kind: whether it runs and what it reads | Holds its read position: the content hash of each plan file it has seen. Defines what counts as an event: a Markdown file that is new or whose content changed. Translates each Trigger into the Thread it belongs to and the Channel address to reply on | A restart must not replay events |
 | Trigger | One revision of one plan file, sent by `operator` and addressed directly to the agent | Belongs to one or more Threads. Its id derives from the file's path and content, so reading the same revision twice creates one Trigger, and accepting it twice creates one Ticket | The unit of audit and of idempotence |
-| Thread | Every revision of one plan file, by its path below the plan directory | At most one Eval runs on it at a time. It may have several Tickets. It holds its Subscriptions, the running Eval and its Decision history | Gives Eval a consistent view and its context |
+| Thread | Every revision of one plan file, by its path in the repository | At most one Eval runs on it at a time. It may have several Tickets. It holds its Subscriptions, the running Eval and its Decision history | Gives Eval a consistent view and its context |
 | Correlation | The relation between Threads that one Trigger belongs to; a plan Trigger is on one Thread | Adds context; never routes | Lets Eval follow related evidence |
-| Channel | The plan's log, `<plan directory>/.super-coding-agent/<path>.log.md` | A Thread may have several Channels; a Ticket holds a set of them. Each message is appended once; the plan file itself is never written | Acknowledgements, answers and results are all writes |
+| Channel | The plan's log, `<repository>/.super-coding-agent/logs/<path>.log.md` | A Thread may have several Channels; a Ticket holds a set of them. Each message is appended once; the plan file itself is never written | Acknowledgements, answers and results are all writes |
 | Policy | The versioned assessment rules, the accept mode, and each Source's part: who may originate work through that Source. The plan Source's part lists `operator` | The Policy version covers the rules, the accept mode and the Source parts. A change that bears on a live Ticket is delivered to its Assignment; it does not revoke Mandates | When the rules change, a running Eval must be discarded |
 | Eval | The judgement on a batch of Triggers, in two layers: gate and assessment | Input: the Trigger batch, a Thread snapshot, every Ticket on the Thread including ended ones, and the current Policy. Output: a Decision. Holds no state | Decides whether new work starts, goes on or stops |
 | Mandate | What an accept grants: the Policy version, the scope, the strength, the matched rules, the sender's identity and how the Source received the Trigger | Immutable; wider scope means a new Ticket. A Ticket's end does not end it: only a person's stop withdraws it, and a Policy that no longer holds it revokes it. Revalidated against the current Policy before an ended Ticket resumes | States why the work may be done, and how far it may go |
@@ -64,10 +64,10 @@ The concepts above and their rules are reusable. The Source implementations, the
 
 | Part | In this repository |
 | --- | --- |
-| Source | Plan files: every Markdown file below the plan directory, outside hidden directories, checked every 30 seconds by default |
+| Source | Plan files: every Markdown file whose repository path matches one of the plan Source's patterns, such as `PLAN.md`, `docs/superpowers/plans/**/*.md` or `specs/**/tasks.md`, outside hidden directories, dependencies and build output, checked every 30 seconds by default |
 | Policy | Assessment rules, the accept mode, and the plan Source's allowed list |
-| Executor | A DSH Executor Session and a git worktree per Ticket, in an execution environment whose variables the Executor and the Sources register; it delegates bounded subtasks to Claude Code and Codex |
-| Channel | The plan's log under `.super-coding-agent/` in the plan directory |
+| Executor | A DSH Executor Session and a git worktree per Ticket, in an execution environment whose variables the Executor and the Sources register; it only coordinates, and delegates all engineering in bounded subtasks to Claude Code and Codex |
+| Channel | The plan's log under `.super-coding-agent/logs/` in the repository, a directory that ignores itself in git |
 
 ## Glossary
 

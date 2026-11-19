@@ -53,14 +53,14 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 /**
- * The DSH tools an Executor Session works with: files, search, the shell and its jobs, the web, skills, its todo list and
- * the one-shot delegation tools of the Claude Code and Codex providers (`subagent_claude_code`, `subagent_codex`). It gets no
- * other tool the profile has, whenever it was registered: none that asks or shows a person something, changes the profile,
- * schedules work or starts goals outside the worker slots, the pause and a person's hold, starts or messages other Sessions,
- * spawns DSH subagents, or edits documents.
+ * The DSH tools an Executor Session coordinates with: reading its plan, briefs and answers, the shell and its jobs for git
+ * checkpoints, skills, its todo list, and the one-shot delegation tools of the Claude Code and Codex providers
+ * (`subagent_claude_code`, `subagent_codex`), which do all reading, writing and checking of code. It gets no other tool the
+ * profile has, whenever it was registered: none that writes, edits or searches files, uses the web, asks or shows a person
+ * something, changes the profile, schedules work or starts goals outside the worker slots, starts or messages other
+ * Sessions, or spawns DSH subagents.
  */
-const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
-  'web_fetch', 'skill', 'todo_write', 'subagent_claude_code', 'subagent_codex']
+const WORK_TOOLS = ['read', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'skill', 'todo_write', 'subagent_claude_code', 'subagent_codex']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'

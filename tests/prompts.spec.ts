@@ -246,8 +246,11 @@ describe('delegation', () => {
     const worker = composePrompt(defaultPrompts(), 'worker'), orchestrator = composePrompt(defaultPrompts(), 'orchestrator')
     expect(worker).toContain('## delegation\n')
     for (const phrase of ['$SUPER_CODING_AGENT_SUBTASK_MINUTES minutes', 'Never delegate the whole plan', '$SUPER_CODING_AGENT_DEVELOP_TOOL develops',
-      '$SUPER_CODING_AGENT_VERIFY_TOOL verifies', 'each brief stands alone', 'commit a checkpoint', 'restore the ticket directory to the checkpoint',
-      'Report ready only when every acceptance criterion']) expect(worker).toContain(phrase)
+      '$SUPER_CODING_AGENT_VERIFY_TOOL verifies', 'each brief stands alone', 'record a checkpoint', 'restore the ticket directory to the checkpoint',
+      'Report ready only when every acceptance criterion', 'delegate a question that changes nothing',
+      'Never read, search, write or edit source code yourself']) expect(worker).toContain(phrase)
+    // The worker does no engineering step itself, so no role names it.
+    expect(worker).not.toContain('means you do that step yourself')
     expect(orchestrator).not.toContain('## delegation')
   })
 })

@@ -13,7 +13,7 @@ type Status = SettingsView['subagents']['codex']
 type ProviderKey = 'claudeCode' | 'codex'
 const PROVIDERS = [{ key: 'claudeCode', id: 'claude-code', label: 'Claude Code' }, { key: 'codex', id: 'codex', label: 'Codex' }] as const
 const ROLES = ['develop', 'verify', 'review'] as const
-const ROLE_OPTIONS = ['claude-code', 'codex', 'worker'] as const
+const ROLE_OPTIONS = ['claude-code', 'codex'] as const
 
 /** `NAME=value` lines, one variable per line; blank lines and lines without `=` are dropped. */
 export const envText = (env: Record<string, string>): string => Object.entries(env).map(([name, value]) => `${name}=${value}`).join('\n')

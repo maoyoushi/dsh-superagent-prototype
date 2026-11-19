@@ -12,7 +12,7 @@ Opening the panel answers three questions, in this order:
 
 ## Tabs
 
-The tabs follow the workflow: **Overview**, **Source**, **Trigger**, **Eval**, **Execution**, and **Settings**. Until setup finds the repository and the plan directory, Overview shows what is missing and links to the setting that fixes it.
+The tabs follow the workflow: **Overview**, **Source**, **Trigger**, **Eval**, **Execution**, and **Settings**. Until setup finds the repository, Overview shows what is missing and links to the setting that fixes it.
 
 | Tab | Shows |
 | --- | --- |
@@ -33,9 +33,9 @@ Ticket details show the originating Trigger, Decision and reason, scope and Poli
 
 ## Settings groups
 
-- **Sources:** the plan Source's card with its switch, the repository directory, the plan directory and **Receive existing plans**. The check interval and the failed checks before an error are under Advanced. Saving the repository or the plan directory checks them and restarts super-coding-agent.
+- **Sources:** the plan Source's card with its switch, the repository directory, the plan file patterns, one glob per row, and **Receive existing plans**. The check interval and the failed checks before an error are under Advanced. Saving the repository checks it and restarts super-coding-agent; a change of the patterns applies at the next check, which takes the plans they newly match as a baseline.
 - **Eval:** the Policy version and rules, followed by **On each Source** and the Eval settings. The plan Source's tab holds its allowed list, `operator` by default. Eval settings select the accept mode, timeout and assessment model.
-- **Execution:** worker model, concurrency, directory root, prepare command and blocked commands. Clicking an available variable inserts it into the prepare command. Below them, **Subagents**: for Claude Code and Codex each, a switch, the command, the environment as `NAME=value` lines and the result of its availability check; Claude Code's model; who develops, verifies and reviews; and the time bound of one subtask. A save that turns a provider on runs `<command> --version` and is refused if the CLI does not start. The environment values, which may hold API keys, are visible and editable only here; Sessions read them masked.
+- **Execution:** worker model, concurrency, directory root, prepare command and blocked commands. Clicking an available variable inserts it into the prepare command. Below them, **Subagents**: for Claude Code and Codex each, a switch, the command, the environment as `NAME=value` lines and the result of its availability check; Claude Code's model; who develops, verifies and reviews, Claude Code or Codex, since the worker itself only coordinates; and the time bound of one subtask. A save that turns a provider on runs `<command> --version` and is refused if the CLI does not start. The environment values, which may hold API keys, are visible and editable only here; Sessions read them masked.
 - **Prompts:** **Edit** changes team sections, built-in parts and skills. **Full prompt** shows the assembled text and compares it with saved text or defaults. **History** lists versions. Edited built-in parts are marked changed and can be reset; templates list their required placeholders.
 
   An upgrade that changes an overridden default marks it **Default updated** (默认内容已更新). The panel compares the old and new defaults above the team's text. If the old default was not recorded, it compares the team's text with the new default instead. Choose **Keep my text** or **Use the new default**. Overrides for removed parts are listed below the tab bar and dropped on the next save.

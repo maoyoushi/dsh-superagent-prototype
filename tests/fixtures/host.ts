@@ -231,7 +231,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const ctx = new Context()
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
   const seeded = new Store(join(directory, 'orchestrator.sqlite'))
-  const sources = { plan: { enabled: true, config: { repository, directory: 'plans' } },
+  const sources = { plan: { enabled: true, config: { repository, patterns: [{ pattern: 'plans/**/*.md' }] } },
     chat: { enabled: true, config: { chats: [{ chatId: CHAT, listen: 'all' }], directMessages: true } } }
   seeded.saveSettings(SettingsSchema.parse({ ...seeded.settings(), sources }))
   seed?.(seeded)

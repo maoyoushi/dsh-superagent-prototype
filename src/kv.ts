@@ -35,7 +35,7 @@ export const KV = {
   /** Per-Source resolved display names mapping a named ID (such as a chat ID) to its display name. */
   sources: { labels: family<Record<string, string>, [source: string]>('source-labels:') },
   /**
-   * Plan Source: the plan directory its baseline was taken for, and each plan file's last received content hash, by directory and
+   * Plan Source: the scope (repository and patterns) its baseline was taken for, and each plan file's last received content hash, by repository and
    * path, so a restart does not receive an unchanged file again.
    */
   plan: { root: record<string>('plan-root'), file: family<{ hash: string; at: string; revision?: number }, [root: string, path: string]>('plan-file:') },

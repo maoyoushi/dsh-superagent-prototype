@@ -99,7 +99,8 @@ it('shows the fact a Source states about a saved setup field, and keeps a saved 
   const plan = all('.dt-card')[1]!
   expect(plan.textContent).toContain('已检出 /repo')
   const labels = () => [...plan.querySelectorAll('label')].map(label => label.textContent)
-  expect(labels()).toEqual(['仓库目录', '计划目录'])
+  expect(labels()).toEqual(['仓库目录'])
+  expect(plan.textContent).toContain('计划文件的路径模式')
   expect(field<HTMLInputElement>('仓库目录').value).toBe('/repo')
   // A switch is labelled by its own control, not a field label.
   expect(plan.textContent).toContain('接收已有的计划')
@@ -109,7 +110,7 @@ it('shows the fact a Source states about a saved setup field, and keeps a saved 
   await click(zh.discard)
   expect(plan.textContent).toContain('已检出 /repo')
   await click([...plan.querySelectorAll<HTMLElement>('[data-disclosure-row]')].find(row => row.textContent?.includes('高级'))!)
-  expect(labels()).toEqual(['仓库目录', '计划目录', '检查间隔 / 秒', '连续失败几次后报告异常'])
+  expect(labels()).toEqual(['仓库目录', '检查间隔 / 秒', '连续失败几次后报告异常'])
   await type(field<HTMLInputElement>('仓库目录'), '/opt/repo')
   expect(plan.textContent).toContain('保存会重启 super-coding-agent：2 个进行中的派工会中断，并带恢复说明重新开始。')
   await act(async () => { plan.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()

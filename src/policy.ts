@@ -93,7 +93,7 @@ const CommandNameSchema = z.string().regex(/^[A-Za-z0-9._-]+$/).refine(name => n
  * A new Ticket's directory as a git worktree of the plan Source's checkout, on a branch named after the Ticket: the branch is
  * reused when an earlier attempt created it, and worktrees whose directories are gone are pruned first.
  */
-export const DEFAULT_PREPARE = 'git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree prune && { git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add "$SUPER_CODING_AGENT_DIR" "agent/$SUPER_CODING_AGENT_NAME" 2>/dev/null || git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"; }'
+export const DEFAULT_PREPARE = 'git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree prune && if git -C "$SUPER_CODING_AGENT_REPOSITORY" show-ref --verify --quiet "refs/heads/agent/$SUPER_CODING_AGENT_NAME"; then git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add "$SUPER_CODING_AGENT_DIR" "agent/$SUPER_CODING_AGENT_NAME"; else git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add -b "agent/$SUPER_CODING_AGENT_NAME" "$SUPER_CODING_AGENT_DIR"; fi'
 /** Executor settings: worker model, concurrency, ticket directory root (empty defaults to `<stateDir>/work`), `prepare` command, and blocked commands. */
 export const ExecutorConfigSchema = z.object({
   model: RoleModelSchema.nullable().default(null),
@@ -105,8 +105,8 @@ export const ExecutorConfigSchema = z.object({
 /** The external coding agents a worker delegates to, by the provider name DSH registers them under. */
 export const SUBAGENT_PROVIDERS = ['claude-code', 'codex'] as const
 export type SubagentProvider = typeof SUBAGENT_PROVIDERS[number]
-/** Who does a step of a delegated subtask: one of the providers, or the worker itself. */
-export const SubagentRoleSchema = z.enum([...SUBAGENT_PROVIDERS, 'worker'])
+/** Who does a step of a delegated subtask: one of the providers; the worker coordinates and does no step itself. */
+export const SubagentRoleSchema = z.enum(SUBAGENT_PROVIDERS)
 export type SubagentRole = z.infer<typeof SubagentRoleSchema>
 const EnvSchema = z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/, 'An environment variable name'), z.string().max(LIMITS.subagentEnvValue))
   .refine(env => Object.keys(env).length <= LIMITS.subagentEnvEntries, `At most ${LIMITS.subagentEnvEntries} variables`)

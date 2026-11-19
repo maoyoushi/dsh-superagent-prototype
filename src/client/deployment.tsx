@@ -60,8 +60,7 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
         <p className="dt-error" role="status"><SetupMessage problem={setup.problem} lead /></p><CheckSetupButton />
       </div>}
       {showAccounts && <Section title={t('deploymentDerived')} hint={t('deploymentDerivedHint')}>
-        <KeyValues rows={[[t('deploymentRepository'), accounts?.repository ?? '—'],
-          [t('deploymentPlanDirectory'), accounts?.planDirectory ?? '—']]} />
+        <KeyValues rows={[[t('deploymentRepository'), accounts?.repository ?? '—']]} />
         <Hint>{t('deploymentAccountsWhere')}</Hint>
       </Section>}
       <Section title={t('deploymentMachine')}>
@@ -81,7 +80,7 @@ export function DeploymentPage({ setup, form, accounts: showAccounts }: { setup:
   </form>
 }
 
-/** Plugin Manager config page; includes the derived repository and plan directory because Source settings live in the main panel. */
+/** Plugin Manager config page; includes the derived repository because Source settings live in the main panel. */
 function PluginPage({ form }: { form: DeploymentForm }) {
   const { t } = usePanel()
   const { state, error } = usePanelData()

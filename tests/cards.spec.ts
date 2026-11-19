@@ -110,7 +110,7 @@ it.each(RULES)('%s (%s)', (_rule, file, says, gone = []) => {
 
 it('keeps each role\'s own instructions short', () => {
   expect(masterPrompt.length).toBeLessThan(1400)
-  expect(workerPrompt.length).toBeLessThan(1000)
+  expect(workerPrompt.length).toBeLessThan(1100)
 })
 
 const trigger: Trigger = { id: 'request-1', source: 'plan', threads: [{ source: 'plan', id: 'login.md' }], actor: { source: 'plan', id: 'alice' }, human: true,

@@ -5,10 +5,10 @@ Use this guide to install, configure and operate super-coding-agent. It covers t
 ## What runs
 
 - **A dedicated DeepSeek Harness profile**, called `super-coding-agent` in this guide. Create it from the Web profile template. It loads the bundle and serves its panel on `127.0.0.1`. Keep it separate from the profile you work in: the plugin changes the process-wide `PATH` and git environment, and its process needs independent restarts and upgrades.
-- **A local git checkout** of the repository the agent works on, with a plan directory in it. Each Ticket gets a worktree of it on its own branch. There are no agent accounts: workers commit with your git identity, and nothing is pushed.
+- **A local git checkout** of the repository the agent works on; plans are Markdown files anywhere in it that match the plan Source's patterns. Each Ticket gets a worktree of it on its own branch. There are no agent accounts: workers commit with your git identity, and nothing is pushed.
 - **Claude Code and Codex,** optional but recommended: the CLIs `claude` and `codex`, installed and signed in as you. The worker delegates subtasks to them.
 
-Plugin configuration holds the state directory and machine limits. Use the panel for everything else: the plan Source for the checkout and plan directory, the Policy for who may ask, and Execution for worker directories, commands and subagents.
+Plugin configuration holds the state directory and machine limits. Use the panel for everything else: the plan Source for the checkout and the plan file patterns, the Policy for who may ask, and Execution for worker directories, commands and subagents.
 
 ### Permissions and isolation
 
@@ -99,9 +99,9 @@ Check super-coding-agent: run `scripts/super-coding-agent --profile super-coding
 
 ## Settings
 
-Setup must succeed before the plan Source reads anything or work starts. Overview lists missing requirements and links to their settings. A settings change to the repository or plan directory runs setup again. If you fix something outside the application, such as creating the plan directory, choose **Check again**.
+Setup must succeed before the plan Source reads anything or work starts. Overview lists missing requirements and links to their settings. A settings change to the repository runs setup again. If you fix something outside the application, such as running `git init` in the checkout, choose **Check again**.
 
-1. **Source.** On the plan card, set the repository directory, the absolute path of the checkout, and the plan directory, `docs/plans` by default, relative to the checkout or absolute. **Receive existing plans** is off by default: the plans present at the first check are a baseline, and only plans added or changed afterwards become work. Replies go to `<plan directory>/.super-coding-agent/<plan path>.log.md`; add `.super-coding-agent/` to the repository's `.gitignore` if you do not want to commit the logs.
+1. **Source.** On the plan card, set the repository directory, the absolute path of the checkout, and the plan file patterns: globs from the repository root, case-insensitive, where `**` spans directories and `*` stays within one. The defaults are `PLAN.md`, `PLANS.md`, `TASKS.md`, `TODO.md`, `plans/**/*.md`, `tasks/**/*.md`, `docs/plans/**/*.md`, `docs/superpowers/plans/**/*.md`, `docs/stories/**/*.md`, `_bmad-output/**/stories/**/*.md` and `specs/**/tasks.md`, which cover superpowers, BMAD, speckit and plain plan or task files. Hidden directories, `node_modules`, `vendor` and build output such as `dist`, `build`, `out`, `target` and `coverage` are never read. **Receive existing plans** is off by default: the plans present at the first check are a baseline, and only plans added or changed afterwards become work; a change of the patterns takes the plans they newly match as a baseline in the same way. Replies go to `<repository>/.super-coding-agent/logs/<plan path>.log.md`; the first reply writes `.super-coding-agent/.gitignore`, which ignores the whole directory, so the logs never show up as changes.
 2. **Policy.** The plan Source's allowed list holds `operator`, the sender of every plan; remove it to stop all new work from plans. The two example rules apply only to proactive candidates, which plan files never are.
 3. **Execution.** The directory root and the prepare command. The default prepare command creates a worktree of the checkout on branch `agent/<ticket name>`; the branch starts from the commit the checkout has checked out. List personal CLIs that workers must not run as blocked commands.
 4. **Subagents.** Turn on Claude Code and Codex, set their commands if they are not `claude` and `codex` on `PATH`, Claude Code's model if it should not use its own setting, and the roles. Put an API key a CLI needs in its environment, as `NAME=value`; DeepSeek Harness does not pass credential-shaped variables such as `ANTHROPIC_API_KEY` to child processes otherwise. Codex takes its model from its own configuration.
@@ -119,7 +119,7 @@ Agents may rely on these routes and fields. The other routes in `src/app/api.ts`
 
 | Request | Answer |
 | --- | --- |
-| `GET state` | What every page reads: `setup`, with `problem`, `null` or a setup problem with `place`, `code`, `values` and `detail`, and `accounts`, the resolved `repository` and `planDirectory` once setup succeeded; `health`, an entry per part, below, with `state` (`starting`, `ready`, `paused` or `error`), `detail` and `at`; `load`, the Executor Sessions `running`, the Tickets `queued` and `maxWorkers`; `paused`; and `masterId` |
+| `GET state` | What every page reads: `setup`, with `problem`, `null` or a setup problem with `place`, `code`, `values` and `detail`, and `accounts`, the resolved `repository` once setup succeeded; `health`, an entry per part, below, with `state` (`starting`, `ready`, `paused` or `error`), `detail` and `at`; `load`, the Executor Sessions `running`, the Tickets `queued` and `maxWorkers`; `paused`; and `masterId` |
 | `GET settings` | `blocks`: `policy`, `eval`, `executor` and `subagents`, each with its `value` and its `revision`; `subagents`: each provider's `enabled`, `mounted`, `available`, `version` and `error`; `sources`: the Source instances, each with `id`, `kind`, `installed`, its block's `value`, `{"enabled": …, "config": {…}}`, and `revision`, its kind's form, and its setup `problem` when it has one; `policyVersion`; and `environment`, the execution environment's `root` and `variables` |
 | `GET sources` | Each Source's status: `state` (`missing`, `off`, `error`, `setup`, `starting`, `paused` or `ready`), the `health` of its parts, its setup `problem`, the last day's `stats`, the Triggers it `filtered` in that day, and the messages it `dropped` in that day |
 | `PUT settings/<block>` with `{"value": …, "revision": n}` | Saves one block: `saved`, the block's new `revision`, `policy_changed` and `restarting`. `value` is the whole block, as `GET settings` holds it; a missing key takes its default |
@@ -138,7 +138,7 @@ Health entries are grouped by responsibility:
 | `assessment`, `launch`, `delivery`, `relay`, `notice`, `reply` | Stored work described in [003 Execution](003-execution.md); delivery counts waiting work, while reply covers Channel messages |
 | `worker` | Executor Session event handling; appears after its first failure |
 | `subagents` | The Claude Code and Codex providers: the versions of the mounted ones, or why one could not start |
-| `plan` | The plan Source's checks of the plan directory |
+| `plan` | The plan Source's checks of the repository for plan files |
 
 A refusal has a status and `error`, its English text:
 
@@ -149,26 +149,26 @@ A refusal has a status and `error`, its English text:
 
 The blocks:
 
-- `source:plan`: `{"enabled": true, "config": {"repository": "/home/me/src/widgets", "directory": "docs/plans", "includeExisting": false}}`, with `pollSeconds` (30) and `failuresBeforeError` (3) as advanced fields.
+- `source:plan`: `{"enabled": true, "config": {"repository": "/home/me/src/widgets", "patterns": [{"pattern": "docs/plans/**/*.md"}], "includeExisting": false}}`, where `patterns` defaults to the list above, with `pollSeconds` (30) and `failuresBeforeError` (3) as advanced fields.
 - `policy`: `{"rules": […], "sources": {"plan": {"allowed": [{"id": "operator", "name": "Operator"}]}}}`.
 - `eval`: `mode`, `timeoutSeconds` and `model`.
 - `executor`: `model`, `maxWorkers`, `directory`, `prepare` and `blockedCommands`. The processing pause is a setting of its own, `paused`, which `POST executor/pause` sets.
-- `subagents`: `{"claudeCode": {"enabled": true, "command": "claude", "env": {}, "model": ""}, "codex": {"enabled": true, "command": "codex", "env": {}}, "roles": {"develop": "claude-code", "verify": "codex", "review": "codex"}, "maxSubtaskMinutes": 20}`. A role is `claude-code`, `codex` or `worker`. A save that turns a provider on, or changes its command, runs `<command> --version` first and is refused with `subagentUnavailable` if it does not start.
+- `subagents`: `{"claudeCode": {"enabled": true, "command": "claude", "env": {}, "model": ""}, "codex": {"enabled": true, "command": "codex", "env": {}}, "roles": {"develop": "claude-code", "verify": "codex", "review": "codex"}, "maxSubtaskMinutes": 20}`. A role is `claude-code` or `codex`; the worker itself only coordinates. A save that turns a provider on, or changes its command, checks that the command names the provider's executable and runs `<command> --version` first and is refused with `subagentUnavailable` if it does not start.
 
-Changing the repository or the plan directory runs the setup check first. A failed check returns 400 with details in `setup`. A successful change, or any save while setup is pending, returns `restarting: true`. The API is temporarily unavailable while the application restarts.
+Changing the repository runs the setup check first. A failed check returns 400 with details in `setup`. A successful change, or any save while setup is pending, returns `restarting: true`. The API is temporarily unavailable while the application restarts.
 
 ```sh
 api=http://127.0.0.1:3082/orchestrator/api
 rev=$(curl -s -H 'x-orchestrator-request: 1' $api/settings | jq '.sources[] | select(.id == "plan") | .revision')
 curl -s -X PUT -H 'x-orchestrator-request: 1' -H 'content-type: application/json' $api/settings/source:plan \
-  -d "{\"value\": {\"enabled\": true, \"config\": {\"repository\": \"$HOME/src/widgets\", \"directory\": \"docs/plans\"}}, \"revision\": $rev}"
+  -d "{\"value\": {\"enabled\": true, \"config\": {\"repository\": \"$HOME/src/widgets\", \"patterns\": [{\"pattern\": \"docs/plans/**/*.md\"}]}}, \"revision\": $rev}"
 ```
 
 ## Setup checks
 
 Setup uses the DeepSeek Harness subprocess service, as worker shells do. It removes environment variables whose names contain KEY, PASSWORD, SECRET or TOKEN.
 
-Setup checks that the repository directory is an absolute path to an existing directory, that `git rev-parse --show-toplevel` succeeds in it, and that the plan directory exists. It then writes the worker environment and checks that workers can run git.
+Setup checks that the repository directory is an absolute path to an existing directory, and that `git rev-parse --show-toplevel` succeeds in it. It then writes the worker environment and checks that workers can run git.
 
 The process environment that setup writes:
 
@@ -179,7 +179,7 @@ A file in `worker-bin` that super-coding-agent did not write stops setup.
 
 ## Try it
 
-Write a small plan as a new Markdown file in the plan directory, with the change it asks for and its acceptance criteria, such as a command that must pass. Within a check interval (30 seconds by default), Overview shows a Ticket. The agent acknowledges the plan in its log, works in its own Session and worktree, delegates subtasks to Claude Code and Codex, and writes the result, with the branch `agent/<ticket name>`, to the log. Edit the plan to change or continue the work.
+Write a small plan as a new Markdown file at a path the plan Source's patterns match, such as `docs/plans/first.md`, with the change it asks for and its acceptance criteria, such as a command that must pass. Within a check interval (30 seconds by default), Overview shows a Ticket. The agent acknowledges the plan in its log, works in its own Session and worktree, delegates subtasks to Claude Code and Codex, and writes the result, with the branch `agent/<ticket name>`, to the log. Edit the plan to change or continue the work.
 
 ## Upgrade
 
@@ -209,7 +209,6 @@ Setup problems appear on the overview with a link to the fix, in the panel's lan
 | `The plan Source names no repository directory.` | Set the repository directory on the plan card |
 | `The repository directory … does not exist or is not an absolute path.` | Set the absolute path of an existing checkout |
 | `… is not a git checkout.` | Point the plan card at the top of a git checkout, or run `git init` there |
-| `The plan directory … does not exist.` | Create it, or change the plan directory on the plan card, then choose **Check again** |
 | `… was not written by super-coding-agent; move it, or choose another state directory.` | Move the named file out of `<stateDir>/worker-bin`, or choose another `stateDir` |
 | `Preparing the agent environment failed.` | The details name the cause, usually that git does not run; install git 2.32 or later |
 | A Ticket fails with `The prepare command failed: …` | The output names the cause, such as a branch `agent/<name>` that already exists or a checkout that is not a git repository; fix it, then retry the Ticket |
@@ -224,4 +223,4 @@ Setup problems appear on the overview with a link to the fix, in the panel's lan
 | `super-coding-agent configuration has keys it does not use` (log) | Remove the named keys; the message says where each value lives now |
 | The log says the plugin is incompatible with the running dsh | Install a DeepSeek Harness version within the `engines.dsh` range |
 | The panel shows "Failed to load plugins" after a DeepSeek Harness upgrade | Restart the running instance |
-| Nothing happens after writing a plan | Check that the file ends in `.md`, is below the plan directory and outside hidden directories, is under 2 MiB, and was added or changed after the first check; that `operator` is on the plan Source's allowed list; that the Source is on; and that processing is not paused |
+| Nothing happens after writing a plan | Check that the file ends in `.md`, its path from the repository root matches one of the plan Source's patterns, it is outside hidden directories, dependencies and build output, it is under 2 MiB, and was added or changed after the first check; that `operator` is on the plan Source's allowed list; that the Source is on; and that processing is not paused |

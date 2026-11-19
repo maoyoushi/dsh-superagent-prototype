@@ -12,6 +12,6 @@ export const testMachine = (overrides: Partial<Machine> = {}): Machine => ({
   admissionContextTimeoutMs: reference(15000), ...overrides,
 })
 export const testDeployment = (overrides: Partial<Deployment> = {}): Deployment => ({
-  ...testMachine(), repository: '/tmp/super-coding-agent-test/repo', plan: { directory: '/tmp/super-coding-agent-test/repo/docs/plans' },
+  ...testMachine(), repository: '/tmp/super-coding-agent-test/repo',
   ...overrides,
 })

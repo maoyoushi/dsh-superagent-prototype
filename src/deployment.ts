@@ -1,4 +1,4 @@
-/** Plugin configuration and startup verification of the local git checkout and plan directory. */
+/** Plugin configuration and startup verification of the local git checkout. */
 import { LIMITS } from './limits.ts'
 import { accessSync, constants, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
@@ -41,10 +41,9 @@ export function machineOf(config: DeploymentConfig): Machine {
   return { stateDir, promptMaxChars, admissionContextMaxPages, admissionContextTimeoutMs }
 }
 
-/** The plan Source fields setup reads: the local git checkout and the plan directory (relative to it, or absolute). */
+/** The plan Source field setup reads: the local git checkout. */
 export const PlanSetupSchema = z.object({
   repository: z.string().trim().default(''),
-  directory: z.string().trim().default('docs/plans'),
 })
 /** Source configuration keys that affect deployment setup and trigger a restart when changed. */
 export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { plan: Object.keys(PlanSetupSchema.shape) }
@@ -52,8 +51,6 @@ export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { plan:
 export interface Deployment extends Machine {
   /** Absolute path of the local git checkout the agent works on. */
   repository: string
-  /** The plan directory (absolute) that holds the operator's plan files. */
-  plan: { directory: string }
 }
 
 /** Resolve a command name or absolute path to an executable file, ignoring the worker shim directory. */
@@ -75,7 +72,7 @@ export function workerProbe(subprocess: SubprocessRuntime, stateDir: string, cwd
 }
 
 const directoryExists = (path: string): boolean => { try { return statSync(path).isDirectory() } catch { return false } }
-/** Verify that the plan Source names an existing local git checkout and plan directory. */
+/** Verify that the plan Source names an existing local git checkout. */
 export async function resolveDeployment(machine: Machine, plan: unknown, probe: Probe): Promise<Deployment> {
   const config = PlanSetupSchema.parse(plan ?? {})
   if (!config.repository) throw new SetupError('repositoryUnset')
@@ -84,7 +81,5 @@ export async function resolveDeployment(machine: Machine, plan: unknown, probe: 
   await probe(['git', '-C', repository, 'rev-parse', '--show-toplevel']).catch((error: unknown) => {
     throw new SetupError('repositoryNotGit', { repository, output: reason(error) })
   })
-  const directory = resolve(repository, config.directory)
-  if (!directoryExists(directory)) throw new SetupError('planDirectoryMissing', { directory })
-  return { ...machine, repository, plan: { directory } }
+  return { ...machine, repository }
 }

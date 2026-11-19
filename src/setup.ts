@@ -8,13 +8,12 @@ export const SETUP_PROBLEMS = {
   repositoryUnset: ['plan', 'The plan Source names no repository directory.'],
   repositoryMissing: ['plan', 'The repository directory {repository} does not exist or is not an absolute path.'],
   repositoryNotGit: ['plan', '{repository} is not a git checkout.'],
-  planDirectoryMissing: ['plan', 'The plan directory {directory} does not exist.'],
 } as const satisfies Record<string, readonly [SetupPlace, string]>
 export type SetupCode = keyof typeof SETUP_PROBLEMS
 export interface SetupProblem { place: SetupPlace; code: SetupCode; values: Record<string, string>; detail: string }
 
 /**
- * Thrown by deployment verification checks when the state directory, the repository checkout or the plan directory fails a check.
+ * Thrown by deployment verification checks when the state directory or the repository checkout fails a check.
  * `Setup` records it for the management overview, and the HTTP layer returns `problem` so the panel can localize it.
  */
 export class SetupError extends Error {

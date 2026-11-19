@@ -58,12 +58,12 @@
               - id: tool-pwsh
                 name: '@deepseek-ai/dsh-tool-pwsh'
                 disabled: !!js process.platform !== 'win32'
+          # The worker coordinates and reads only plans, briefs and answers: it writes no file and searches no code.
           - id: tool-fs
             name: '@deepseek-ai/dsh-tool-fs'
-          - id: tool-fs-search
-            name: '@deepseek-ai/dsh-tool-fs-search'
             config:
-              sampleOverCapGlobResults: false
+              write: false
+              edit: false
           # A wait for a job ends after 5 s too; the job's end wakes the worker with its result.
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
@@ -108,11 +108,6 @@
             name: '@deepseek-ai/dsh-tool-todo'
             config:
               allowParallelInProgress: true
-          - id: tool-web
-            name: '@deepseek-ai/dsh-tool-web'
-            config:
-              fetch: false
-              searchTimeoutMs: 60000
     # The agent preset of the main Session (ROUTER_PRESET in src/app/sessions.ts). The worker's 5-second shell and job waits, so a command or a wait does not hold back the next candidates, and
     # only what the main Session uses: no subagents, web, file search or writes, todo list, questions to a person, presenting,
     # plan mode, plugin manager, scheduling, goals or workflows. No persona: the main Session's prompt is complete, so it has

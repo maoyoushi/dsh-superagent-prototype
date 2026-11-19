@@ -116,7 +116,7 @@ export let server: PanelServer
 
 function resolved() {
   const accounts = server.setup.accounts
-  return accounts ? testDeployment({ repository: accounts.repository, plan: { directory: accounts.planDirectory } }) : undefined
+  return accounts ? testDeployment({ repository: accounts.repository }) : undefined
 }
 /** Default source health: paused during setup; the chat Source defaults to `socket closed` unless overridden. */
 function healthOf(name: string): Health {
@@ -175,9 +175,10 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
   environment: { root: '/srv/super-coding-agent/work', variables: [
     { owner: 'executor', enabled: true, variables: [{ key: 'SUPER_CODING_AGENT_DIR', description: { zh: '工单的执行目录',
       en: 'The ticket directory' } },
-      { key: 'SUPER_CODING_AGENT_NAME', description: { zh: '工单短名', en: 'Short name' } }] },
-    { owner: 'plan', enabled: false, variables: [{ key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '仓库',
-      en: 'Repository' } }] }] },
+      { key: 'SUPER_CODING_AGENT_NAME', description: { zh: '工单短名', en: 'Short name' } },
+      { key: 'SUPER_CODING_AGENT_REPOSITORY', description: { zh: '仓库', en: 'Repository' } }] },
+    { owner: 'plan', enabled: false, variables: [{ key: 'SUPER_CODING_AGENT_PLAN_FILE', description: { zh: '计划文件',
+      en: 'Plan file' } }] }] },
 })
 const overviewView = (): ApiResponse<'GET overview'> => {
   const setup = server.setup.problem
@@ -238,7 +239,7 @@ function initial(): PanelServer {
       plan: { allowed: [{ id: OPERATOR }] } },
       rules: [{ id: 'copy', name: '文案修改', enabled: true, instruction: '修正明确的文案错误' }] },
     sources: { chat: { enabled: true, config: { chats: [{ chatId: 'oc_team', listen: 'mentions' }], directMessages: true } },
-      plan: { enabled: true, config: { repository: '/repo', directory: 'docs/plans' } } },
+      plan: { enabled: true, config: { repository: '/repo' } } },
     executor: { blockedCommands: ['personal-cli'] },
   })
   const ended = ticketSummary({ id: 't0', title: '旧工单', state: 'ended', actions: { retry: false, stop: false },
@@ -249,7 +250,7 @@ function initial(): PanelServer {
     health: {}, down: false, pending: 0, opened: [], requests: [], misuse: [], queued: new Set(), dropped: [], failing: [],
     subagents: { 'claude-code': { enabled: false, mounted: false, available: null, version: '', error: '' },
       codex: { enabled: false, mounted: false, available: null, version: '', error: '' } },
-    setup: { machine: MACHINE, problem: null, accounts: { repository: '/repo', planDirectory: '/repo/docs/plans' } },
+    setup: { machine: MACHINE, problem: null, accounts: { repository: '/repo' } },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
     prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: [],
       skillPrefix: SKILL_PREFIX, revision: 0, current: { ...defaults, config: defaultPrompts() },

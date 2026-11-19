@@ -1,4 +1,4 @@
-/** Verifies the local checkout and plan directory, configures the worker execution environment and command shims, and tracks setup readiness. */
+/** Verifies the local checkout, configures the worker execution environment and command shims, and tracks setup readiness. */
 import type { Context } from '@deepseek-ai/cordis'
 import { UserError } from '../core/index.ts'
 import { SETUP_FIELDS, resolveDeployment, workerProbe, type Deployment, type Machine } from '../deployment.ts'
@@ -18,7 +18,7 @@ const setupFields = (settings: Settings) =>
 export const setupChanged = (before: Settings, after: Settings): boolean => setupFields(before) !== setupFields(after)
 
 /**
- * Resolves the local git checkout and plan directory the plan Source names, then writes and applies the git and shim environment used by worker processes.
+ * Resolves the local git checkout the plan Source names, then writes and applies the git and shim environment used by worker processes.
  * `Runtime` runs it at startup to gate orchestration readiness, while `Settings` uses it to validate setup field changes, update blocked command shims, and schedule restarts.
  */
 export class Setup {

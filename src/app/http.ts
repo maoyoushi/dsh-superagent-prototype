@@ -96,7 +96,7 @@ function setupView(runtime: HttpHost) {
   const resolved = runtime.configured() ? runtime.deployment : undefined
   return {
     machine: machineView(runtime.machine), problem: runtime.setupProblem ?? null,
-    accounts: resolved ? { repository: resolved.repository, planDirectory: resolved.plan.directory } : null,
+    accounts: resolved ? { repository: resolved.repository } : null,
   }
 }
 /** Build the `/orchestrator/api/state` response consumed by the management panel and `scripts/super-coding-agent status` (`docs/006-deployment.md`). */

@@ -19,7 +19,7 @@ const setupError = (place: string, code: string, values: Record<string, unknown>
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'deployment-'))
-  mkdirSync(join(dir, 'bin')); mkdirSync(join(dir, 'state', 'worker-bin'), { recursive: true }); mkdirSync(join(dir, 'widgets', 'docs', 'plans'), { recursive: true })
+  mkdirSync(join(dir, 'bin')); mkdirSync(join(dir, 'state', 'worker-bin'), { recursive: true }); mkdirSync(join(dir, 'widgets'))
   path = [join(dir, 'state-link', 'worker-bin'), `${join(dir, 'state', 'worker-bin')}/`, join(dir, 'bin'), '/usr/bin', '/bin'].join(':')
   program(join(dir, 'bin', 'tool'))
   // Stale worker shims with the same binary name must be skipped regardless of PATH normalization or symlinks.
@@ -50,16 +50,14 @@ describe('configuration schema', () => {
 })
 
 describe('setup', () => {
-  it('resolves the local checkout and the plan directory the plan Source names', async () => {
+  it('resolves the local checkout the plan Source names', async () => {
     const repository = join(dir, 'widgets'), host = machine()
-    expect(await resolveDeployment(host, { repository, directory: 'docs/plans', pollSeconds: 30 }, probe))
-      .toEqual({ ...host, repository, plan: { directory: join(repository, 'docs', 'plans') } })
-    // The directory defaults to docs/plans, and an absolute one is used as it is.
-    expect((await resolveDeployment(machine(), { repository }, probe)).plan.directory).toBe(join(repository, 'docs', 'plans'))
-    mkdirSync(join(dir, 'elsewhere'))
-    expect((await resolveDeployment(machine(), { repository, directory: join(dir, 'elsewhere') }, probe)).plan.directory).toBe(join(dir, 'elsewhere'))
+    expect(await resolveDeployment(host, { repository, patterns: [{ pattern: 'plans/**/*.md' }], pollSeconds: 30 }, probe))
+      .toEqual({ ...host, repository })
+    // Plans need no directory of their own: a checkout with no plans folder resolves too.
+    expect((await resolveDeployment(machine(), { repository }, probe)).repository).toBe(repository)
   })
-  it('names what is missing: the repository, a directory at its path, a git checkout there, the plan directory', async () => {
+  it('names what is missing: the repository, a directory at its path, a git checkout there', async () => {
     const needs = (code: string, values: Record<string, unknown>, plan: unknown) =>
       expect(resolveDeployment(machine(), plan, probe)).rejects.toEqual(setupError('plan', code, values))
     await needs('repositoryUnset', {}, undefined)
@@ -70,7 +68,6 @@ describe('setup', () => {
     await needs('repositoryMissing', { repository: join(dir, 'file') }, { repository: join(dir, 'file') })
     mkdirSync(join(dir, 'plain'))
     await needs('repositoryNotGit', { repository: join(dir, 'plain'), output: expect.stringContaining('not a git repository') }, { repository: join(dir, 'plain') })
-    await needs('planDirectoryMissing', { directory: join(dir, 'widgets', 'plans') }, { repository: join(dir, 'widgets'), directory: 'plans' })
   })
   it('finds an executable by name on PATH, skipping the worker shims', () => {
     expect(executable('tool', path, join(dir, 'state', 'worker-bin'))).toBe(join(dir, 'bin', 'tool'))
