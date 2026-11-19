@@ -16,7 +16,7 @@ import { reference, testMachine } from './fixtures/deployment.ts'
 import type { Machine } from '../src/deployment.ts'
 import { SCHEMA_VERSION, Store } from '../src/app/store.ts'
 import { KV } from '../src/kv.ts'
-import { SettingsSchema, policyVersion, type SettingsOrigin } from '../src/policy.ts'
+import { DEFAULT_PREPARE, SettingsSchema, policyVersion, type SettingsOrigin } from '../src/policy.ts'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { checkPlans, planKind, OPERATOR } from '../src/sources/plan.ts'
 import { Commands } from '../src/infra/commands.ts'
@@ -994,6 +994,8 @@ it('runs the prepare command once for a new ticket, under the execution root wit
   const prepare = (command: string) => runtime.store.saveSettings({ ...runtime.store.settings(), executor: { ...runtime.store.settings().executor, prepare: command } })
   const runs = () => subprocess.spawn.mock.calls.map(([spec]) => spec as { argv: string[]; cwd: string; env?: Record<string, string> }).filter(spec => spec.argv[0] === 'sh')
   prepare('git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add "$SUPER_CODING_AGENT_DIR" -b "agent/$SUPER_CODING_AGENT_NAME"')
+  // Tickets made before this one ran the default prepare command.
+  subprocess.spawn.mockClear()
   const { ticket } = await acceptedTicket()
   expect(runs()).toEqual([expect.objectContaining({ argv: ['sh', '-c', 'git -C "$SUPER_CODING_AGENT_REPOSITORY" worktree add "$SUPER_CODING_AGENT_DIR" -b "agent/$SUPER_CODING_AGENT_NAME"'], cwd: join(directory, 'work'),
     env: expect.objectContaining({ SUPER_CODING_AGENT_DIR: ticket.execution!.directory, SUPER_CODING_AGENT_NAME: ticket.execution!.name, SUPER_CODING_AGENT_REPOSITORY: REPO() }) })])
@@ -1008,6 +1010,15 @@ it('runs the prepare command once for a new ticket, under the execution root wit
   await runtime.idle()
   expect(runtime.store.tickets.get(failed.ticket.id)!.assignments.at(-1)).toMatchObject({ report: expect.objectContaining({ state: 'failed', summary: expect.stringContaining('The prepare command failed: fatal: no such clone') }) })
   expect(waitsForPerson(runtime.store.tickets.get(failed.ticket.id)!)).toBe(true)
+})
+
+it('prepares a new ticket\'s directory as a git worktree of the checkout on its own branch by default', async () => {
+  expect(runtime.store.settings().executor.prepare).toBe(DEFAULT_PREPARE)
+  subprocess.spawn.mockClear()
+  const { ticket } = await acceptedTicket()
+  expect(subprocess.spawn.mock.calls.map(([spec]) => spec as { argv: string[]; env?: Record<string, string> }).filter(spec => spec.argv[0] === 'sh'))
+    .toEqual([expect.objectContaining({ argv: ['sh', '-c', DEFAULT_PREPARE], env: expect.objectContaining({ SUPER_CODING_AGENT_REPOSITORY: REPO(),
+      SUPER_CODING_AGENT_DIR: ticket.execution!.directory, SUPER_CODING_AGENT_NAME: ticket.execution!.name }) })])
 })
 
 it('counts a ticket whose directory the host prepared before prepare commands existed as prepared', async () => {
