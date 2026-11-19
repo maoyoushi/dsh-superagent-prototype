@@ -14,7 +14,7 @@ import { gitEnv } from './fixtures/git.ts'
 import { chat, startRuntime, type Host } from './fixtures/host.ts'
 
 /** A Subagents on a bare Cordis context, with fake providers that record what they were mounted with and when they were released. */
-function harness(probe: Probe) {
+function harness(probe: Probe, registered?: (provider: SubagentProvider) => boolean) {
   let settings: Settings = SettingsSchema.parse({})
   let health: Health | undefined
   const mounted: { provider: SubagentProvider; env: Record<string, string> }[] = [], released: SubagentProvider[] = []
@@ -24,7 +24,8 @@ function harness(probe: Probe) {
   } })
   const changed = vi.fn()
   const subagents = new Subagents({ context: new Context(), settings: () => settings, lifetime: new AbortController().signal, cwd: '/tmp',
-    health: { get: () => health, set: value => { health = value }, release: () => {} }, probe, load: async provider => plugin(provider), changed })
+    health: { get: () => health, set: value => { health = value }, release: () => {} }, probe, load: async provider => plugin(provider), changed,
+    ...(registered ? { registered } : {}) })
   const set = (value: unknown) => { settings = SettingsSchema.parse({ subagents: value }) }
   return { subagents, mounted, released, set, changed, health: () => health, current: () => settings.subagents }
 }
@@ -40,6 +41,21 @@ it('mounts each enabled provider once with its environment, and Claude Code\'s m
     { provider: 'codex', env: {} }])
   expect(h.health()).toMatchObject({ state: 'ready', detail: 'Claude Code 2.1.327 (Claude Code); Codex codex-cli 0.158.0' })
   expect(h.subagents.status().codex).toEqual({ enabled: true, mounted: true, available: true, version: 'codex-cli 0.158.0', error: '' })
+})
+
+it('uses a provider the profile already registers instead of mounting its own, and says that its settings do not apply to it', async () => {
+  const h = harness(versions, provider => provider === 'codex')
+  h.set({ claudeCode: { enabled: true }, codex: { enabled: true, env: { OPENAI_BASE_URL: 'https://example.test' } } })
+  await h.subagents.install()
+  expect(h.mounted.map(item => item.provider)).toEqual(['claude-code'])
+  expect(h.subagents.status().codex).toEqual({ enabled: true, mounted: true, available: true, version: 'codex-cli 0.158.0', error: '' })
+  expect(h.health()).toMatchObject({ state: 'ready',
+    detail: 'Claude Code 2.1.327 (Claude Code); Codex codex-cli 0.158.0 (registered by the profile; its command and environment here do not apply)' })
+  h.set({ claudeCode: { enabled: true }, codex: { enabled: false } })
+  await h.subagents.sync()
+  expect(h.subagents.status().codex).toMatchObject({ enabled: false, mounted: false })
+  await h.subagents.dispose()
+  expect(h.released).toEqual(['claude-code'])
 })
 
 it('remounts a provider whose environment changed, and releases one that was disabled', async () => {

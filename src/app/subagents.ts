@@ -23,6 +23,12 @@ export type ProviderLoader = (provider: SubagentProvider) => Promise<ProviderPlu
 /** Runs a command and returns its standard output; rejects when it cannot start or exits non-zero. */
 export type Probe = (argv: string[], signal: AbortSignal) => Promise<string>
 
+/** What `Subagents` uses of DSH's subagents service: whether a provider of a name is registered. */
+interface ProviderRegistry { getProvider(name: string): unknown }
+/** Whether a provider is registered on the context, by this profile's own bundles or by `Subagents` itself. */
+const registeredOn = (ctx: Context) => (provider: SubagentProvider): boolean =>
+  (ctx.get('subagents') as ProviderRegistry | undefined)?.getProvider(provider) !== undefined
+
 const loadProvider: ProviderLoader = async provider => (provider === 'codex'
   ? await import('@deepseek-ai/dsh-subagent-codex') : await import('@deepseek-ai/dsh-subagent-claude-code')) as unknown as ProviderPlugin
 
@@ -38,12 +44,19 @@ export interface SubagentsHost {
   readonly cwd: string
   readonly load?: ProviderLoader
   readonly probe?: Probe
+  /** Whether a provider of that name is registered; the default asks DSH's subagents service. */
+  readonly registered?: (provider: SubagentProvider) => boolean
   /** Called after the mounted providers changed, so live workers can take up or drop their delegation tools. */
   changed?(): void
 }
 
-/** A mounted provider: the command and environment it was mounted with, and its fiber. */
-interface Mount { key: string; fiber: Fiber }
+/**
+ * A provider workers can use: the command and environment it was mounted with, and its fiber; or, without a fiber, one the
+ * profile registered itself (such as DSH Desktop's own Claude Code and Codex bundles), which `Subagents` uses as it is.
+ */
+interface Mount { key: string; fiber?: Fiber }
+/** What the health entry adds to a provider the profile registered. */
+const PROFILE_PROVIDER = '(registered by the profile; its command and environment here do not apply)'
 /** One provider's state, as the panel reads it. */
 export interface SubagentStatus { enabled: boolean; mounted: boolean; available: boolean | null; version: string; error: string }
 
@@ -109,7 +122,7 @@ export class Subagents {
     await this.queue
     const mounts = [...this.mounts.values()]
     this.mounts.clear()
-    await Promise.allSettled(mounts.map(mount => mount.fiber.dispose()))
+    await Promise.allSettled(mounts.map(mount => mount.fiber?.dispose()))
   }
   private async apply(): Promise<void> {
     const config = this.host.settings().subagents
@@ -123,11 +136,13 @@ export class Subagents {
       // A disabled provider keeps no check, so its status does not report a result of when it was on.
       if (!key) this.checks.delete(provider)
       if (mounted?.key === key || (!mounted && !key)) continue
-      if (mounted) { this.mounts.delete(provider); changed = true; await mounted.fiber.dispose().catch(() => {}) }
+      if (mounted) { this.mounts.delete(provider); changed = true; await mounted.fiber?.dispose().catch(() => {}) }
       if (!key) continue
       if (this.host.lifetime.aborted) continue
       const checked = await this.probe(provider, settings.command)
       if (!checked.available) { failures.push(`${LABELS[provider]}: ${checked.error}`); continue }
+      // DSH refuses a second provider of the same name, so one the profile registered is used instead of mounting another.
+      if ((this.host.registered ?? registeredOn(this.host.context))(provider)) { this.mounts.set(provider, { key }); changed = true; continue }
       try {
         const plugin = await (this.host.load ?? loadProvider)(provider)
         const fiber = await (this.host.context.plugin as (plugin: unknown, config: unknown) => PromiseLike<Fiber>)(plugin, { env })
@@ -150,7 +165,8 @@ export class Subagents {
   }
   private report(failures: string[]): void {
     const on = SUBAGENT_PROVIDERS.filter(provider => this.mounts.has(provider))
-    const versions = on.map(provider => `${LABELS[provider]} ${this.checks.get(provider)?.version || 'ready'}`)
+    const versions = on.map(provider => [`${LABELS[provider]} ${this.checks.get(provider)?.version || 'ready'}`,
+      ...(this.mounts.get(provider)?.fiber ? [] : [PROFILE_PROVIDER])].join(' '))
     this.host.health.set(failures.length ? { state: 'error', detail: failures.join('; '), at: now() }
       : { state: 'ready', detail: versions.length ? versions.join('; ') : 'No subagent is enabled', at: now() })
   }
