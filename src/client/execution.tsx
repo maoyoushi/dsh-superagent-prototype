@@ -1,4 +1,4 @@
-/** Execution status view (active Tickets and pause control) and Execution settings group (Executor capacity and workspace environment). */
+/** Execution status view (active Tickets and pause control) and Execution settings group (Executor capacity, workspace environment and subagents). */
 import { useRef, useState } from 'react'
 import { TICKET_FILTERS, type TicketFilter } from '../app/api.ts'
 import { LIMITS } from '../limits.ts'
@@ -8,6 +8,7 @@ import { SaveBar } from './draft.tsx'
 import { usePanel } from './provider.tsx'
 import { TicketLine } from './rows.tsx'
 import { ConfigHistory, Field, Fields, ModelField, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
+import { SubagentSettings } from './subagents.tsx'
 import { localized } from './text.ts'
 import { ConfirmButton, Hint, LabelValue, LoadMore, LoadState, Section, StatusHead } from './widgets.tsx'
 
@@ -122,6 +123,7 @@ export function ExecutionSettings() {
       </Fields>
       <SaveBar {...draft} onDiscard={draft.discard} />
     </form>
-    <ConfigHistory blocks={['executor', 'pause']} />
+    <SubagentSettings />
+    <ConfigHistory blocks={['executor', 'pause', 'subagents']} />
   </div>
 }

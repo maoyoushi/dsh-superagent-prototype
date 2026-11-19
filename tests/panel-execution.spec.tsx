@@ -222,3 +222,30 @@ it('sends one stop for a double click on Confirm', async () => {
   await act(async () => { confirm.click(); confirm.click() })
   expect(server.requests.filter(request => request.path === 'tickets/t1/stop')).toHaveLength(1)
 })
+
+it('saves the Subagents settings with their environment parsed once, and shows why a provider cannot be enabled', async () => {
+  server.subagents = { 'claude-code': { enabled: true, mounted: true, available: true, version: '2.1.327 (Claude Code)', error: '' },
+    codex: { enabled: false, mounted: false, available: false, version: '', error: 'codex is not an executable file on PATH' } }
+  server.settings = { ...server.settings, subagents: { ...server.settings.subagents, claudeCode: { ...server.settings.subagents.claudeCode,
+    enabled: true } } }
+  await mount()
+  await click(zh['tab.execution'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  expect(text()).toContain(zh.subagentsTitle)
+  expect(text()).toContain('可用 · 2.1.327 (Claude Code)')
+  await type(field<HTMLInputElement>(zh.subagentModel), 'claude-opus-5-5')
+  await type(field<HTMLTextAreaElement>('Claude Code 环境变量'), 'ANTHROPIC_BASE_URL=https://example.test\n\nnot a variable')
+  await type(field<HTMLSelectElement>(zh['subagentRole.review']), 'worker')
+  await type(field<HTMLInputElement>(zh.subagentMinutes), '30')
+  const saves = () => all('.dt-savebar button').filter(button => button.textContent === zh.save)
+  await click(saves().at(-1)!)
+  expect(server.requests.find(request => request.path === 'settings/subagents')?.body).toMatchObject({ value: {
+    claudeCode: { enabled: true, model: 'claude-opus-5-5', env: { ANTHROPIC_BASE_URL: 'https://example.test' } },
+    roles: { develop: 'claude-code', verify: 'codex', review: 'worker' }, maxSubtaskMinutes: 30 } })
+  expect(server.settings.subagents).toMatchObject({ claudeCode: { model: 'claude-opus-5-5' }, maxSubtaskMinutes: 30 })
+  // Enabling Codex, whose command does not start, is refused with the check's output.
+  await click(find('启用 Codex', '[role="switch"]'))
+  await click(saves().at(-1)!)
+  expect(text()).toContain('codex is not an executable file on PATH')
+  expect(server.settings.subagents.codex.enabled).toBe(false)
+})
