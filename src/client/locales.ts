@@ -541,6 +541,7 @@ const TEXT = {
   'promptPart.runtime/replies': ['回复与确认', 'Replies and acknowledgements'],
   'promptPart.runtime/dispatch': ['路由', 'Routing'],
   'promptPart.runtime/work': ['执行', 'Execution'],
+  'promptPart.runtime/delegation': ['分工与子任务委派', 'Delegating subtasks'],
   promptViews: ['查看方式', 'View'],
   promptBody: ['Markdown 正文', 'Markdown'],
   promptResetSection: ['恢复此段默认内容', 'Restore this section default'],

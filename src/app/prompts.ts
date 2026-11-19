@@ -22,7 +22,7 @@ const SkillNameSchema = z.string().regex(SKILL_NAME).refine(name => !(Object.key
   'This name belongs to a built-in skill')
 /** The built-in parts a team may override, by key: both roles' parts, the Source skills, and the generated parts' templates. */
 const PART_KEYS = ['runtime/shared', 'runtime/orchestrator', 'runtime/worker', 'runtime/subscriptions', 'runtime/replies',
-  'runtime/dispatch', 'runtime/work', 'runtime/admission', 'runtime/handoff/orchestrator', 'runtime/handoff/worker', 'runtime/environment',
+  'runtime/dispatch', 'runtime/work', 'runtime/delegation', 'runtime/admission', 'runtime/handoff/orchestrator', 'runtime/handoff/worker', 'runtime/environment',
   'runtime/policy', 'runtime/policy/none', 'skill/feishu', 'skill/github'] as const
 export type PartKey = typeof PART_KEYS[number]
 /** A team's text for a built-in part, and `base`, the key of the built-in text it was edited from. */
@@ -58,6 +58,7 @@ export const builtInParts = (): Readonly<Record<PartKey, BuiltInPart>> => parts 
   'runtime/subscriptions': { roles: BOTH, text: `## subscriptions\n${guides.subscriptions}` },
   'runtime/replies': { roles: BOTH, text: `## replies\n${guides.replies}` },
   'runtime/dispatch': { roles: MAIN, text: `## dispatch\n${guides.dispatch}` }, 'runtime/work': { roles: WORKER, text: `## work\n${guides.work}` },
+  'runtime/delegation': { roles: WORKER, text: `## delegation\n${guides.delegation}` },
   'runtime/admission': { roles: MAIN, text: mainAdmissionPolicy },
   'runtime/handoff/orchestrator': { roles: MAIN, text: handoffPolicy('orchestrator') },
   'runtime/handoff/worker': { roles: WORKER, text: handoffPolicy('worker') },
@@ -108,7 +109,7 @@ export function promptParts(config: PromptConfig, role: Role, environment?: stri
     fixed('runtime/shared'), fixed(`runtime/${role}`),
     ...TEAM_SECTIONS.map(team),
     ...['subscriptions', 'replies', role === 'orchestrator' ? 'dispatch' : 'work'].map(name => fixed(`runtime/${name}`)),
-    ...role === 'orchestrator' ? [fixed('runtime/admission')] : [],
+    ...role === 'orchestrator' ? [fixed('runtime/admission')] : [fixed('runtime/delegation')],
     fixed('runtime/handoff', `runtime/handoff/${role}`),
     ...environment ? [{ name: 'runtime/environment', kind: 'generated' as const, key: 'runtime/environment', text: environment }] : [],
     ...role === 'orchestrator' && policy ? [{ name: 'runtime/policy', kind: 'generated' as const, ...policy }] : [],

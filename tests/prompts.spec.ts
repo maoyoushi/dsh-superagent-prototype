@@ -48,7 +48,7 @@ it('assembles every role from fixed sections around the team sections, whatever 
   const config = { communication: 'Say little.', scope: '', delivery: 'Attach screenshots.', skills: {} }
   for (const role of ['orchestrator', 'worker'] as const) {
     const names = promptParts(config, role, 'env').map(part => part.name)
-    expect(names).toEqual(['runtime/shared', `runtime/${role}`, 'communication', 'delivery', 'runtime/subscriptions', 'runtime/replies', role === 'orchestrator' ? 'runtime/dispatch' : 'runtime/work', ...role === 'orchestrator' ? ['runtime/admission'] : [], 'runtime/handoff', 'runtime/environment'])
+    expect(names).toEqual(['runtime/shared', `runtime/${role}`, 'communication', 'delivery', 'runtime/subscriptions', 'runtime/replies', role === 'orchestrator' ? 'runtime/dispatch' : 'runtime/work', ...role === 'orchestrator' ? ['runtime/admission'] : ['runtime/delegation'], 'runtime/handoff', 'runtime/environment'])
     const prompt = composePrompt(config, role)
     for (const fixed of [sharedPrompt, role === 'orchestrator' ? masterPrompt : workerPrompt, guides.subscriptions!, guides.replies!, handoffPolicy(role)]) expect(prompt).toContain(fixed)
     expect(prompt.endsWith(handoffPolicy(role))).toBe(true)
@@ -243,5 +243,16 @@ describe('overrides of built-in parts', () => {
       expect(promptsOf(store).compose(defaultPrompts(), 'worker')).toContain('an empty value means that part is not configured here). '
         + `The prepare command of a ticket directory reads the same variables:\n${ENVIRONMENT_LINE}`)
     })
+  })
+})
+
+describe('delegation', () => {
+  it('gives only the worker the delegation part: bounded subtasks, self-contained briefs, checkpoints and the role tools', () => {
+    const worker = composePrompt(defaultPrompts(), 'worker'), orchestrator = composePrompt(defaultPrompts(), 'orchestrator')
+    expect(worker).toContain('## delegation\n')
+    for (const phrase of ['$DSH_SUPERAGENT_SUBTASK_MINUTES minutes', 'Never delegate the whole plan', '$DSH_SUPERAGENT_DEVELOP_TOOL develops',
+      '$DSH_SUPERAGENT_VERIFY_TOOL verifies', 'each brief stands alone', 'commit a checkpoint', 'restore the ticket directory to the checkpoint',
+      'Report ready only when every acceptance criterion']) expect(worker).toContain(phrase)
+    expect(orchestrator).not.toContain('## delegation')
   })
 })

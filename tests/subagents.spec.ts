@@ -5,7 +5,7 @@ import { UserError } from '../src/core/index.ts'
 import type { Health } from '../src/sources/host.ts'
 import { SettingsSchema, SubagentsConfigSchema, type Settings, type SubagentProvider } from '../src/policy.ts'
 import { Subagents, providerEnv, type Probe, type ProviderPlugin } from '../src/app/subagents.ts'
-import { startRuntime, type Host } from './fixtures/host.ts'
+import { feishu, startRuntime, type Host } from './fixtures/host.ts'
 
 /** A Subagents on a bare Cordis context, with fake providers that record what they were mounted with and when they were released. */
 function harness(probe: Probe) {
@@ -96,4 +96,16 @@ it('saves the Subagents block from the panel only, hides its environment values 
   const view = await host.api('GET', 'settings')
   expect(view.body).toMatchObject({ blocks: { subagents: { revision: 1 } }, subagents: { codex: { enabled: false } } })
   expect(runtime.health.subagents).toMatchObject({ state: 'ready' })
+})
+
+it('names each role\'s tool and the subtask bound in a ticket\'s execution environment, worker for the Executor itself', async () => {
+  host = await startRuntime()
+  const { runtime } = host
+  const settings = runtime.store.settings()
+  runtime.store.saveSettings({ ...settings, subagents: { ...settings.subagents, roles: { develop: 'codex', verify: 'worker', review: 'claude-code' },
+    maxSubtaskMinutes: 45 } })
+  const { ticket } = await host.acceptedTicket(feishu('1', '修复登录页'))
+  expect(Object.fromEntries(runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))).toMatchObject({
+    DSH_SUPERAGENT_DEVELOP_TOOL: 'subagent_codex', DSH_SUPERAGENT_VERIFY_TOOL: 'worker', DSH_SUPERAGENT_REVIEW_TOOL: 'subagent_claude_code',
+    DSH_SUPERAGENT_SUBTASK_MINUTES: '45' })
 })
