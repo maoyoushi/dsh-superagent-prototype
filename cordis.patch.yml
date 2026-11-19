@@ -6,6 +6,9 @@
       name: dsh-superagent
     - id: dsh-superagent-github
       name: dsh-superagent/github-watch
+    # Plan files written in the repository's plan directory; the profile names the repository on the Source.
+    - id: dsh-superagent-plan
+      name: dsh-superagent/plan-watch
     # Optional Feishu Source; requires configuring a bot CLI after enabling.
     - id: dsh-superagent-feishu
       name: dsh-superagent/feishu-watch

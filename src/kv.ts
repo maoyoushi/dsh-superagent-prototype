@@ -55,4 +55,9 @@ export const KV = {
   feishu: { chats: record<Record<string, boolean>>('feishu-chats'), history: family<string, [chat: string]>('feishu-history:'),
     topics: family<Record<string, string>, [chat: string]>('feishu-history-threads:'),
     seen: family<string[], [thread: string]>('thread-seen:'), initialized: family<boolean, [thread: string]>('thread-initialized:') },
+  /**
+   * Plan Source: the plan directory its baseline was taken for, and each plan file's last received content hash, by directory and
+   * path, so a restart does not receive an unchanged file again.
+   */
+  plan: { root: record<string>('plan-root'), file: family<{ hash: string; at: string }, [root: string, path: string]>('plan-file:') },
 }

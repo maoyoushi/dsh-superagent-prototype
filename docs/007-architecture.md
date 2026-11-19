@@ -368,6 +368,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-pull.ts` | The pull request rules: which pull requests a Ticket follows (`claimPull`, `observePull`), the closes it reports to the Engine, and `pullEndNotices`, the chat notice of a Ticket that ended merged or closed |
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
+| `src/sources/plan.ts` | The plan kind and plugin entry, exported as `./plan-watch`: each new or changed Markdown file in the plan directory becomes a Trigger from `operator`, after a baseline of the files present when watching starts |
+| `src/sources/plan-files.ts` | `planFiles`: the plan files below a directory, outside hidden ones, with their content hashes |
+| `src/sources/plan-channel.ts` | The plan Channel: replies appended once per message to a plan file's log under `.superagent/`, never to the plan |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
@@ -424,6 +427,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/followups.spec.ts` | A person's follow-up on a Ticket's Thread: its notice to the main Session, the tools that act on it, what a burst costs; a worker's hand-back and context follow, and the main Session's note |
 | `tests/health.spec.ts` | One health entry per part, each cleared by its own next success |
 | `tests/delivery.spec.ts` | `AgentDelivery` |
+| `tests/plan-source.spec.ts` | The plan Source: the baseline, new and changed plan files as Triggers and Tickets, the reply log, a missing directory, its Thread context and search |
 | `tests/subagents.spec.ts` | The subagent providers: availability checks, mounting and remounting from settings, health, and the panel-only Subagents block whose environment values Sessions never read |
 | `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the models of the two roles |
 | `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
